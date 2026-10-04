@@ -58,6 +58,7 @@ const VIP_FORM_TYPES = {
 
 const VIP_FORM_COMMON_DEFAULTS = {
     status: 'closed',          // 'auto' (use opensAt/closesAt) | 'open' | 'closed'
+    bannerUrl: '',             // form-specific banner; blank = use the event's email banner
     opensAt: '',               // ISO timestamps, used when status is 'auto'
     closesAt: '',
     askPhone: true,

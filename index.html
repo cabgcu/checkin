@@ -366,6 +366,9 @@
         .fc-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 18px; }
         .fc-dates { display: none; gap: 12px; margin-top: 14px; }
         .fc-dates.on { display: grid; grid-template-columns: 1fr 1fr; }
+        .fc-banner { border-radius: 16px; overflow: hidden; background: var(--inset-bg); border: 1px solid var(--line); max-width: 520px; }
+        .fc-banner img { display: block; width: 100%; height: auto; max-height: 220px; object-fit: cover; }
+        .fc-banner-empty { padding: 28px; text-align: center; color: var(--text-dim); font-size: 13px; }
         details.fc-more { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 14px; }
         details.fc-more summary { cursor: pointer; color: var(--accent-blue); font-weight: 500; font-size: 14px; list-style: none; }
         details.fc-more summary::-webkit-details-marker { display: none; }
@@ -2153,6 +2156,18 @@
                 </div>
                 <details class="fc-more" data-type="${type}" ${openDetails.has(type) ? 'open' : ''}>
                     <summary>Customize form</summary>
+                    <label class="stat-label">Banner image</label>
+                    <div class="fc-banner">
+                        ${cfg.bannerUrl
+                            ? `<img src="${escapeHtml(processImageUrl(cfg.bannerUrl))}" alt="Form banner">`
+                            : `<div class="fc-banner-empty">${currentData.bannerUrl ? 'Using the event banner from Email Templates' : 'No banner'}</div>`}
+                    </div>
+                    <div style="display:flex; gap:8px; margin:10px 0 18px; flex-wrap:wrap;">
+                        <input type="file" accept="image/*" id="fc-${type}-bannerFile" style="display:none;" onchange="uploadFormBanner('${type}', this.files[0]); this.value='';">
+                        <button class="btn-action secondary" onclick="document.getElementById('fc-${type}-bannerFile').click()">${cfg.bannerUrl ? 'Replace photo' : 'Upload photo'}</button>
+                        ${cfg.bannerUrl ? `<button class="btn-ghost" style="color:var(--danger-text);" onclick="updateFormConfig('${type}', { bannerUrl: '' }, 'Banner removed')">Remove</button>` : ''}
+                        <input class="modern-input" style="flex:1; min-width:200px;" ${f('bannerUrl')} value="${escapeHtml(cfg.bannerUrl)}" placeholder="…or paste an image URL, then Save form">
+                    </div>
                     <div class="form-grid" style="margin-bottom:16px;">
                         <div><label class="stat-label">Form title</label><input class="modern-input" ${f('title')} value="${escapeHtml(cfg.title)}"></div>
                         <div><label class="stat-label">Max guests per registration</label><input type="number" min="0" max="50" class="modern-input" ${f('guestLimit')} value="${cfg.guestLimit}"></div>
@@ -2176,6 +2191,24 @@
                 </details>
             </div>`;
         }).join('');
+    }
+
+    async function uploadFormBanner(type, file) {
+        if (!file) return;
+        if (!file.type.startsWith('image/')) { showToast('Please choose an image file'); return; }
+        document.getElementById('loader').style.display = 'flex';
+        document.querySelector('#loader span').innerText = 'UPLOADING...';
+        const ext = (file.name.split('.').pop() || 'png').replace(/[^a-zA-Z0-9]/g, '');
+        const path = `form-banners/${currentData.activeId}_${type}_${Date.now()}.${ext}`;
+        const { error } = await _supabase.storage.from('banners').upload(path, file, { upsert: true, contentType: file.type });
+        document.getElementById('loader').style.display = 'none';
+        document.querySelector('#loader span').innerText = 'SYNCING';
+        if (error) {
+            console.error('Form banner upload failed:', error);
+            alert("Couldn't upload the banner. Make sure the public 'banners' storage bucket exists (run supabase-setup.sql), or paste an image URL instead.");
+            return;
+        }
+        updateFormConfig(type, { bannerUrl: _supabase.storage.from('banners').getPublicUrl(path).data.publicUrl }, `${VIP_FORM_TYPES[type].label} banner updated`);
     }
 
     function eventForms() {
@@ -2209,6 +2242,7 @@
         if (!title) { showToast("Form title can't be empty"); return; }
         updateFormConfig(type, {
             title,
+            bannerUrl: el('bannerUrl').value.trim(),
             intro: el('intro').value.trim(),
             guestLimit: Math.max(0, Math.min(50, parseInt(el('guestLimit').value, 10) || 0)),
             askPhone: el('askPhone').checked,
@@ -2221,8 +2255,8 @@
     }
 
     function resetFormSettings(type) {
-        if (!confirm(`Reset the ${VIP_FORM_TYPES[type].label} form's text and options to the defaults? Its open/closed status and dates are kept.`)) return;
-        const keep = (({ status, opensAt, closesAt }) => ({ status, opensAt, closesAt }))(vipFormConfig(formsStore, currentData.activeId, type));
+        if (!confirm(`Reset the ${VIP_FORM_TYPES[type].label} form's text and options to the defaults? Its banner, open/closed status and dates are kept.`)) return;
+        const keep = (({ status, opensAt, closesAt, bannerUrl }) => ({ status, opensAt, closesAt, bannerUrl }))(vipFormConfig(formsStore, currentData.activeId, type));
         eventForms()[type] = keep;
         saveFormsStore().then(ok => { if (ok) showToast('Form reset'); renderFormsTab(true); });
     }
