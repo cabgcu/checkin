@@ -16,6 +16,7 @@
 
     <!-- Dependencies -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="vip-forms.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
 
@@ -356,6 +357,22 @@
 
         .setup-card { background: var(--card-bg); border: 1px solid var(--line); border-radius: var(--radius-xl); padding: 24px; margin-bottom: 20px; }
         .setup-card-glow { display: none; }
+        .fc-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
+        .fc-head h3 { margin: 0 0 6px; font-size: 17px; font-weight: 600; }
+        .fc-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--text-muted); font-size: 13px; }
+        .fc-links { display: flex; gap: 8px; flex-wrap: wrap; }
+        .fc-link-box { margin-top: 16px; display: flex; gap: 8px; }
+        .fc-link-box input { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--text-muted); }
+        .fc-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 18px; }
+        .fc-dates { display: none; gap: 12px; margin-top: 14px; }
+        .fc-dates.on { display: grid; grid-template-columns: 1fr 1fr; }
+        details.fc-more { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 14px; }
+        details.fc-more summary { cursor: pointer; color: var(--accent-blue); font-weight: 500; font-size: 14px; list-style: none; }
+        details.fc-more summary::-webkit-details-marker { display: none; }
+        details.fc-more[open] summary { margin-bottom: 16px; }
+        .fc-checks { display: flex; flex-direction: column; gap: 12px; margin: 4px 0 18px; }
+        .fc-checks .sub { display: flex; align-items: center; gap: 10px; margin-left: 24px; flex-wrap: wrap; }
+        .fc-checks .sub input { width: auto; }
         .setup-card-body { position: relative; }
         .danger-zone { padding: 24px; border: 1px solid var(--danger-border); border-radius: var(--radius-xl); background: rgba(248, 113, 113, 0.04); }
 
@@ -470,6 +487,7 @@
             .settings-tabs { width: 100%; }
             .settings-tab { flex: 1; }
             .tab-full { display: none; }
+            .fc-dates.on { grid-template-columns: 1fr; }
             .tab-short { display: inline; }
             .modal-overlay { padding: 0; align-items: flex-end; }
             .modal-content { padding: 24px 18px calc(24px + env(safe-area-inset-bottom)); border-radius: 24px 24px 0 0; max-height: 92vh; }
@@ -820,6 +838,7 @@
                 <h2 class="page-title" style="margin:0;">Settings</h2>
                 <div class="settings-tabs">
                     <button id="stab-event" class="settings-tab active" onclick="switchSettingsTab('event')"><span class="tab-full">Event Setup</span><span class="tab-short">Event</span></button>
+                    <button id="stab-forms" class="settings-tab" onclick="switchSettingsTab('forms')"><span class="tab-full">Sign-up Forms</span><span class="tab-short">Forms</span></button>
                     <button id="stab-emails" class="settings-tab" onclick="switchSettingsTab('emails')"><span class="tab-full">Email Templates</span><span class="tab-short">Emails</span></button>
                 </div>
             </div>
@@ -867,6 +886,12 @@
                         <button onclick="deleteCurrentEvent()" class="btn-action" style="background: var(--gradient-danger);">Delete Event</button>
                     </div>
                 </div>
+            </div>
+
+            <!-- TAB: SIGN-UP FORMS -->
+            <div id="settings-tab-forms" class="settings-section" style="display:none;">
+                <p class="page-sub" style="margin-top:-8px;">Public sign-up forms for the active event. Registrations show up in the guest list right away, and each main contact gets a private link to edit their guests.</p>
+                <div id="formsList"></div>
             </div>
 
             <!-- TAB 2: EMAIL TEMPLATES -->
@@ -1028,7 +1053,7 @@
 
         setupUnifiedScanner();
         renderAddForm('staff');
-        await loadEmailTemplateLibrary();
+        await Promise.all([loadEmailTemplateLibrary(), loadFormsStore()]);
         await refreshData();
         setupRealtime();
     }
@@ -1406,6 +1431,7 @@
         // Ensure filter remains active if they refresh
         filterTable();
         if (document.getElementById('partyModal').style.display === 'flex') renderGuestDetail();
+        if (document.getElementById('settings-tab-forms')?.style.display === 'block') renderFormsTab();
         const unified = document.getElementById('unifiedCheckInInput');
         if (unified && document.getElementById('view-scan').style.display !== 'none') filterUnifiedCheckIn(unified.value);
     }
@@ -1462,6 +1488,7 @@
                 ${isLabel ? '' : `<button type="button" class="btn-action ${isIn ? 'secondary' : ''}" onclick="detailCheckIn()">${isIn ? 'Undo check in' : 'Mark checked in'}</button>`}
                 ${isLabel ? '' : `<button type="button" class="btn-action secondary" onclick="resend('${g.id}')" ${g.email ? '' : 'disabled'}>${g.sent === 'Yes' ? 'Resend' : 'Send'} ticket</button>`}
                 <button type="button" class="btn-action secondary" onclick="closePartyModal(); openCustomEmailModal(['${g.id}'])" ${g.email ? '' : 'disabled'}>Email</button>
+                ${vipFormTypeForTeam(currentParty[0]?.team) ? `<button type="button" class="btn-action secondary" onclick="copyText(vipFormLink(location.href, { manage: '${currentParty[0].id}' }), 'Edit link copied')" title="Private link the main contact uses to edit this registration">Copy edit link</button>` : ''}
                 <button type="button" class="btn-action secondary" style="color:var(--danger-text);" onclick="deleteFromDetail('${g.id}')">Delete</button>
             </div>
             <div class="gd-section">
@@ -2042,6 +2069,164 @@
         refreshData(null, true);
     }
 
+    // ============================================================
+    // SIGN-UP FORMS (Settings → Sign-up Forms) — see vip-forms.js
+    // ============================================================
+    let formsStore = {};
+
+    async function loadFormsStore() {
+        try {
+            const { data, error } = await _supabase.from('secrets').select('value').eq('name', VIP_FORMS_KEY).maybeSingle();
+            if (error) throw error;
+            formsStore = data?.value ? (JSON.parse(data.value) || {}) : {};
+        } catch (e) {
+            console.error("Failed to load form settings:", e);
+            formsStore = {};
+        }
+    }
+
+    async function saveFormsStore() {
+        const valStr = JSON.stringify(formsStore);
+        let { data, error } = await _supabase.from('secrets').update({ value: valStr }).eq('name', VIP_FORMS_KEY).select();
+        if (!error && (!data || data.length === 0)) {
+            ({ error } = await _supabase.from('secrets').insert([{ name: VIP_FORMS_KEY, value: valStr }]));
+        }
+        if (error) { console.error("Error saving form settings:", error); showToast("⚠️ Couldn't save form settings"); return false; }
+        return true;
+    }
+
+    // datetime-local <-> ISO (stored in UTC so every device agrees on when a form opens)
+    function isoToLocalInput(iso) {
+        if (!iso) return '';
+        const d = new Date(iso);
+        if (isNaN(d)) return '';
+        const pad = n => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+    function localInputToIso(v) { return v ? new Date(v).toISOString() : ''; }
+    function fmtWhen(iso) { return new Date(iso).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); }
+
+    function copyText(text, msg) {
+        const done = () => showToast(msg || 'Copied');
+        if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(done, () => prompt('Copy this link:', text));
+        else prompt('Copy this link:', text);
+    }
+
+    function formStatusBadge(cfg) {
+        const st = vipFormState(cfg);
+        if (st.open) return `<span class="status-badge sent">Open${cfg.status === 'auto' && cfg.closesAt ? ' · closes ' + fmtWhen(cfg.closesAt) : ''}</span>`;
+        if (st.reason === 'not_yet') return `<span class="status-badge draft">Opens ${fmtWhen(cfg.opensAt)}</span>`;
+        if (st.reason === 'ended') return `<span class="status-badge na">Closed ${fmtWhen(cfg.closesAt)}</span>`;
+        return `<span class="status-badge na">Closed</span>`;
+    }
+
+    function renderFormsTab(force = false) {
+        const el = document.getElementById('formsList');
+        if (!el) return;
+        // Don't wipe a form someone is typing into when realtime data refreshes
+        if (!force && el.contains(document.activeElement) && document.activeElement.matches('input, textarea, select')) return;
+        const openDetails = new Set(Array.from(el.querySelectorAll('details[open]')).map(d => d.dataset.type));
+        const eventId = currentData.activeId;
+        el.innerHTML = Object.entries(VIP_FORM_TYPES).map(([type, def]) => {
+            const cfg = vipFormConfig(formsStore, eventId, type);
+            const link = vipFormLink(location.href, { event: eventId, form: type });
+            const count = currentData.vips.filter(v => vipFormTypeForTeam(v.team) === type).length;
+            const seg = ['closed', 'open', 'auto'].map(st => `<button class="${cfg.status === st ? 'on' : ''}" onclick="setFormStatus('${type}', '${st}')">${{ closed: 'Closed', open: 'Open', auto: 'Scheduled' }[st]}</button>`).join('');
+            const f = (k) => `id="fc-${type}-${k}"`;
+            return `
+            <div class="setup-card">
+                <div class="fc-head">
+                    <div>
+                        <h3>${escapeHtml(def.label)}</h3>
+                        <div class="fc-meta">${formStatusBadge(cfg)}<span>${count} registration${count === 1 ? '' : 's'}</span><span>· up to ${cfg.guestLimit} guest${cfg.guestLimit === 1 ? '' : 's'}</span></div>
+                    </div>
+                    <div class="seg">${seg}</div>
+                </div>
+                <div class="fc-dates ${cfg.status === 'auto' ? 'on' : ''}">
+                    <div><label class="stat-label">Opens</label><input type="datetime-local" class="modern-input" ${f('opensAt')} value="${isoToLocalInput(cfg.opensAt)}" onchange="saveFormDates('${type}')"></div>
+                    <div><label class="stat-label">Closes</label><input type="datetime-local" class="modern-input" ${f('closesAt')} value="${isoToLocalInput(cfg.closesAt)}" onchange="saveFormDates('${type}')"></div>
+                </div>
+                <div class="fc-link-box">
+                    <input class="modern-input" value="${escapeHtml(link)}" readonly onclick="this.select()">
+                    <button class="btn-action secondary" style="flex-shrink:0;" onclick="copyText('${escapeHtml(link)}', 'Form link copied')">Copy link</button>
+                    <a class="btn-action secondary" style="flex-shrink:0; text-decoration:none;" href="${escapeHtml(link)}" target="_blank" rel="noopener">Preview</a>
+                </div>
+                <details class="fc-more" data-type="${type}" ${openDetails.has(type) ? 'open' : ''}>
+                    <summary>Customize form</summary>
+                    <div class="form-grid" style="margin-bottom:16px;">
+                        <div><label class="stat-label">Form title</label><input class="modern-input" ${f('title')} value="${escapeHtml(cfg.title)}"></div>
+                        <div><label class="stat-label">Max guests per registration</label><input type="number" min="0" max="50" class="modern-input" ${f('guestLimit')} value="${cfg.guestLimit}"></div>
+                    </div>
+                    <label class="stat-label">Intro text</label>
+                    <textarea class="modern-input" rows="3" ${f('intro')} style="margin-bottom:16px; resize:vertical;">${escapeHtml(cfg.intro)}</textarea>
+                    <div class="fc-checks">
+                        <label class="check-row"><input type="checkbox" ${f('askPhone')} ${cfg.askPhone ? 'checked' : ''}> Ask for a phone number</label>
+                        <label class="check-row"><input type="checkbox" ${f('askShirt')} ${cfg.askShirt ? 'checked' : ''}> Ask for shirt sizes</label>
+                        <label class="check-row"><input type="checkbox" ${f('allowEdits')} ${cfg.allowEdits ? 'checked' : ''}> Let people edit their registration with their private link</label>
+                        <div class="sub"><span class="stat-label" style="margin:0;">Edits allowed until</span><input type="datetime-local" class="modern-input" style="max-width:240px;" ${f('editsUntil')} value="${isoToLocalInput(cfg.editsUntil)}"><span class="stat-label" style="margin:0;">(blank = no deadline)</span></div>
+                    </div>
+                    <label class="stat-label">Message when the form is closed</label>
+                    <textarea class="modern-input" rows="2" ${f('closedMessage')} style="margin-bottom:16px; resize:vertical;">${escapeHtml(cfg.closedMessage)}</textarea>
+                    <label class="stat-label">Message after someone signs up</label>
+                    <textarea class="modern-input" rows="2" ${f('successMessage')} style="margin-bottom:16px; resize:vertical;">${escapeHtml(cfg.successMessage)}</textarea>
+                    <div style="display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+                        <button class="btn-ghost" onclick="resetFormSettings('${type}')">Reset to defaults</button>
+                        <button class="btn-action" onclick="saveFormSettings('${type}')">Save form</button>
+                    </div>
+                </details>
+            </div>`;
+        }).join('');
+    }
+
+    function eventForms() {
+        const id = currentData.activeId;
+        if (!formsStore[id]) formsStore[id] = {};
+        return formsStore[id];
+    }
+
+    async function updateFormConfig(type, changes, message) {
+        const forms = eventForms();
+        forms[type] = { ...(forms[type] || {}), ...changes };
+        if (await saveFormsStore()) showToast(message);
+        renderFormsTab(true);
+    }
+
+    function setFormStatus(type, status) {
+        const labels = { closed: 'closed', open: 'open', auto: 'scheduled' };
+        updateFormConfig(type, { status }, `${VIP_FORM_TYPES[type].label} form is now ${labels[status]}`);
+    }
+
+    function saveFormDates(type) {
+        const get = k => document.getElementById(`fc-${type}-${k}`).value;
+        const opensAt = localInputToIso(get('opensAt')), closesAt = localInputToIso(get('closesAt'));
+        if (opensAt && closesAt && new Date(closesAt) <= new Date(opensAt)) { showToast("Close time must be after open time"); return; }
+        updateFormConfig(type, { opensAt, closesAt }, 'Schedule saved');
+    }
+
+    function saveFormSettings(type) {
+        const el = k => document.getElementById(`fc-${type}-${k}`);
+        const title = el('title').value.trim();
+        if (!title) { showToast("Form title can't be empty"); return; }
+        updateFormConfig(type, {
+            title,
+            intro: el('intro').value.trim(),
+            guestLimit: Math.max(0, Math.min(50, parseInt(el('guestLimit').value, 10) || 0)),
+            askPhone: el('askPhone').checked,
+            askShirt: el('askShirt').checked,
+            allowEdits: el('allowEdits').checked,
+            editsUntil: localInputToIso(el('editsUntil').value),
+            closedMessage: el('closedMessage').value.trim() || VIP_FORM_COMMON_DEFAULTS.closedMessage,
+            successMessage: el('successMessage').value.trim() || VIP_FORM_COMMON_DEFAULTS.successMessage
+        }, `${VIP_FORM_TYPES[type].label} form saved`);
+    }
+
+    function resetFormSettings(type) {
+        if (!confirm(`Reset the ${VIP_FORM_TYPES[type].label} form's text and options to the defaults? Its open/closed status and dates are kept.`)) return;
+        const keep = (({ status, opensAt, closesAt }) => ({ status, opensAt, closesAt }))(vipFormConfig(formsStore, currentData.activeId, type));
+        eventForms()[type] = keep;
+        saveFormsStore().then(ok => { if (ok) showToast('Form reset'); renderFormsTab(true); });
+    }
+
     // --- CUSTOM EMAIL MODAL ---
     let _customEmailAttachments = []; // [{ name, size, content }] picked here, or [{ name, size, url, fromTemplate }]
 
@@ -2541,6 +2726,7 @@
         document.getElementById('settings-tab-' + tabId).style.display = 'block';
         document.getElementById('stab-' + tabId).classList.add('active');
         if (tabId === 'emails') updatePreview();
+        if (tabId === 'forms') renderFormsTab(true);
     }
 
     function showToast(m) { const t = document.getElementById('toast'); if(t) { t.innerText = m; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 3000); } }
@@ -2656,6 +2842,13 @@
         if (error || !data?.[0]) { console.error(error); showToast("⚠️ Couldn't create event"); return; }
         emailTemplateStore[data[0].id] = JSON.parse(JSON.stringify(lib));
         await saveEmailTemplateLibrary();
+        // Carry form wording over too, but start every form closed
+        if (formsStore[currentData.activeId]) {
+            const copy = JSON.parse(JSON.stringify(formsStore[currentData.activeId]));
+            Object.values(copy).forEach(c => { c.status = 'closed'; c.opensAt = ''; c.closesAt = ''; c.editsUntil = ''; });
+            formsStore[data[0].id] = copy;
+            await saveFormsStore();
+        }
         document.getElementById('newEventName').value = "";
         await refreshData(data[0].id); 
         showToast("Created!"); 
