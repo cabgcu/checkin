@@ -63,10 +63,10 @@ const VIP_FORM_COMMON_DEFAULTS = {
     closesAt: '',
     askPhone: true,
     askShirt: false,
-    allowEdits: true,          // registrants can edit their party with their private link
+    allowEdits: true,          // registrants can edit their party after confirming name + email
     editsUntil: '',            // ISO timestamp; blank = until the event is deleted
     closedMessage: 'Registration is closed right now. Please reach out to the CAB Special Events team with any questions.',
-    successMessage: "You're registered! We've emailed you a link to view or edit your registration. Tickets are emailed to each guest before the event."
+    successMessage: "You're registered! We've emailed you a confirmation. To make changes later, come back to this page and choose \"Edit your registration\". Tickets are emailed to each guest before the event."
 };
 
 function vipFormConfig(store, eventId, type) {
