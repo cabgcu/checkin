@@ -220,26 +220,10 @@
         .progress-ring .hole b { font-size: 22px; font-weight: 700; }
         .progress-ring .hole span { font-size: 11px; color: var(--text-muted); }
 
-        .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; padding-top: 22px; margin-top: 22px; border-top: 1px solid var(--line); }
+        .stat-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; padding-top: 22px; margin-top: 22px; border-top: 1px solid var(--line); }
         .stat-grid .k { color: var(--text-muted); font-size: 12px; margin-bottom: 8px; }
         .stat-grid .v { display: flex; align-items: center; gap: 8px; font-size: 20px; font-weight: 700; }
         .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; flex-shrink: 0; }
-
-        .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-        .legend { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
-        .legend li { display: flex; align-items: center; gap: 12px; color: var(--text-muted); font-size: 13px; font-weight: 500; }
-        .legend li .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .legend li .val { color: #fff; font-weight: 600; }
-        .legend .bar { flex: 0 0 90px; height: 6px; border-radius: 6px; background: #27272a; overflow: hidden; }
-        .legend .bar i { display: block; height: 100%; border-radius: 6px; }
-        .empty-note { color: var(--text-dim); font-size: 13px; }
-        .shirt-group-row { padding: 10px 0; border-bottom: 1px solid var(--line); }
-        .shirt-group-row:last-child { border-bottom: none; }
-        .shirt-group-title { font-size: 12px; font-weight: 600; color: #fff; margin-bottom: 8px; }
-        .shirt-group-title span { color: var(--text-dim); font-weight: 500; }
-        .size-chips { display: flex; gap: 6px; flex-wrap: wrap; }
-        .size-chip { background: var(--inset-bg); border: 1px solid var(--line); border-radius: 8px; padding: 3px 9px; font-size: 12px; color: var(--text-muted); }
-        .size-chip b { color: #fff; font-weight: 600; margin-left: 4px; }
 
         /* ── TABLE ── */
         .table-container { background: var(--card-bg); border: 1px solid var(--line); border-radius: var(--radius-xl); overflow: hidden; }
@@ -423,7 +407,6 @@
 
         /* ── RESPONSIVE ── */
         @media (max-width: 1100px) {
-            .two-col { grid-template-columns: 1fr; }
             .header-search { width: 240px; }
             .header-actions .btn-action span.lbl { display: none; }
         }
@@ -448,7 +431,8 @@
             .progress-ring { width: 96px; height: 96px; }
             .progress-ring .hole { width: 70px; height: 70px; }
             .progress-ring .hole b { font-size: 17px; }
-            .stat-grid { grid-template-columns: 1fr 1fr; gap: 16px; }
+            .stat-grid { gap: 12px; }
+            .stat-grid .v { font-size: 18px; }
 
             .filter-row { padding: 16px; }
             .filter-row h2 { width: 100%; margin-bottom: 4px; }
@@ -716,18 +700,6 @@
                 <div><div class="k">Remaining</div><div class="v"><span class="dot" style="background:#60a5fa"></span><span id="countLeft">0</span></div></div>
                 <div><div class="k">Tickets sent</div><div class="v"><span class="dot" style="background:var(--success-text)"></span><span id="countSent">0</span></div></div>
                 <div><div class="k">Tickets unsent</div><div class="v"><span class="dot" style="background:var(--warning-text)"></span><span id="countUnsent">0</span></div></div>
-                <div><div class="k">Shirts</div><div class="v"><span class="dot" style="background:var(--accent-pink)"></span><span id="countShirts">0</span></div></div>
-            </div>
-        </div>
-
-        <div class="two-col">
-            <div class="card">
-                <div class="card-title"><h2>Guest types</h2></div>
-                <ul class="legend" id="statsBreakdown"></ul>
-            </div>
-            <div class="card">
-                <div class="card-title"><h2>Shirt sizes</h2></div>
-                <div id="shirtBreakdownDetails"></div>
             </div>
         </div>
 
@@ -735,7 +707,10 @@
             <div class="filter-row">
                 <h2>Guests</h2>
                 <select id="typeFilter" class="modern-input" onchange="filterTable()">
-                    <option value="ALL">All Types</option>
+                    <option value="ALL">All types</option>
+                </select>
+                <select id="shirtFilter" class="modern-input" onchange="filterTable()">
+                    <option value="ALL">All shirt sizes</option>
                 </select>
                 <button onclick="sendBulk()" id="blastBtn" class="btn-action">Email unsent tickets</button>
                 <button onclick="openCustomEmailModal()" class="btn-action secondary">Custom email</button>
@@ -1351,70 +1326,39 @@
         const typeFilter = document.getElementById('typeFilter');
         if (typeFilter) {
             const currentFilterValue = typeFilter.value || "ALL";
-            typeFilter.innerHTML = `<option value="ALL">All Types</option><option value="UNSENT">⚠️ Unsent Tickets</option>` + 
-                Array.from(uniqueTypes).sort().map(t => `<option value="${t}">${t}</option>`).join('');
+            typeFilter.innerHTML = `<option value="ALL">All types</option>` + 
+                Array.from(uniqueTypes).sort().map(t => `<option value="${escapeHtml(t)}">${escapeHtml(t)} (${typeCounts[t]})</option>`).join('');
             // Keep previous selection if it exists
-            if (Array.from(uniqueTypes).includes(currentFilterValue) || currentFilterValue === "UNSENT") {
+            if (Array.from(uniqueTypes).includes(currentFilterValue)) {
                 typeFilter.value = currentFilterValue;
             } else {
                 typeFilter.value = "ALL";
             }
         }
 
-        // CALCULATE BREAKDOWN OF SHIRT SIZES
-        let groupShirtCounts = {};
-        let globalTotalShirts = 0;
-
+        // Shirt size filter options, ordered by size, with counts
+        const sizeOrder = ["Small", "Medium", "Large", "X-Large", "XX-Large", "XXX-Large"];
+        const shirtCounts = {};
+        let noShirt = 0;
         currentData.vips.forEach(v => {
-            let s = v.shirtSize;
-            if (s && s !== '-' && s !== 'N/A' && s.trim() !== '') {
-                // Separate hosts from guests by checking the team string
-                let isGuest = v.team && v.team.startsWith("Guest of ");
-                let baseType = cleanTeamName(getVIPType(v));
-                let type = isGuest ? `${baseType} (Guests)` : baseType;
-
-                if (!groupShirtCounts[type]) {
-                    groupShirtCounts[type] = { total: 0, sizes: {} };
-                }
-                groupShirtCounts[type].sizes[s] = (groupShirtCounts[type].sizes[s] || 0) + 1;
-                groupShirtCounts[type].total++;
-                globalTotalShirts++;
-            }
+            const sz = (v.shirtSize || '').trim();
+            if (sz && sz !== '-' && sz !== 'N/A') shirtCounts[sz] = (shirtCounts[sz] || 0) + 1;
+            else if (v.sent !== 'N/A') noShirt++;
         });
-
-        // Guest types legend with proportional bars
-        const TYPE_COLORS = ['#8b5cf6', '#ec4899', '#ef4444', '#10b981', '#60a5fa', '#f59e0b', '#14b8a6'];
-        const breakdownContainer = document.getElementById('statsBreakdown');
-        if (breakdownContainer) {
-            const types = Array.from(uniqueTypes).sort();
-            const maxCount = Math.max(1, ...types.map(t => typeCounts[t]));
-            breakdownContainer.innerHTML = types.length ? types.map((t, i) => {
-                const c = TYPE_COLORS[i % TYPE_COLORS.length];
-                return `<li><span class="dot" style="background:${c}"></span><span class="name">${escapeHtml(t)}</span>
-                    <span class="bar"><i style="width:${typeCounts[t] / maxCount * 100}%; background:${c}"></i></span>
-                    <span class="val">${typeCounts[t]}</span></li>`;
-            }).join('') : '<li class="empty-note">No guests yet.</li>';
-        }
-
-        // Shirt sizes per group
-        document.getElementById('countShirts').innerText = globalTotalShirts;
-        const shirtDetailsContainer = document.getElementById('shirtBreakdownDetails');
-        if (shirtDetailsContainer) {
-            const sizeOrder = ["Small", "Medium", "Large", "X-Large", "XX-Large", "XXX-Large"];
-            shirtDetailsContainer.innerHTML = globalTotalShirts > 0 ? Object.keys(groupShirtCounts).sort().map(group => {
-                const groupData = groupShirtCounts[group];
-                const sortedSizes = Object.keys(groupData.sizes).sort((a, b) => {
-                    const ia = sizeOrder.indexOf(a), ib = sizeOrder.indexOf(b);
-                    if (ia !== -1 && ib !== -1) return ia - ib;
-                    if (ia !== -1) return -1;
-                    if (ib !== -1) return 1;
-                    return a.localeCompare(b);
-                });
-                return `<div class="shirt-group-row">
-                    <div class="shirt-group-title">${escapeHtml(group)} <span>· ${groupData.total}</span></div>
-                    <div class="size-chips">${sortedSizes.map(sz => `<span class="size-chip">${escapeHtml(sz)}<b>${groupData.sizes[sz]}</b></span>`).join('')}</div>
-                </div>`;
-            }).join('') : '<div class="empty-note">No shirt sizes recorded.</div>';
+        const shirtFilter = document.getElementById('shirtFilter');
+        if (shirtFilter) {
+            const prev = shirtFilter.value || 'ALL';
+            const sizes = Object.keys(shirtCounts).sort((a, b) => {
+                const ia = sizeOrder.indexOf(a), ib = sizeOrder.indexOf(b);
+                if (ia !== -1 && ib !== -1) return ia - ib;
+                if (ia !== -1) return -1;
+                if (ib !== -1) return 1;
+                return a.localeCompare(b);
+            });
+            shirtFilter.innerHTML = `<option value="ALL">All shirt sizes</option>` +
+                sizes.map(sz => `<option value="${escapeHtml(sz)}">${escapeHtml(sz)} (${shirtCounts[sz]})</option>`).join('') +
+                (noShirt ? `<option value="NONE">No shirt size (${noShirt})</option>` : '');
+            shirtFilter.value = (prev === 'NONE' && noShirt) || sizes.includes(prev) ? prev : 'ALL';
         }
 
         const AVATAR_COLORS = ['#8b5cf6', '#ec4899', '#2563eb', '#10b981', '#f59e0b', '#ef4444'];
@@ -1436,7 +1380,7 @@
                     : `<button onclick="event.stopPropagation(); checkIn('${v.id}')" class="btn-action btn-checkin ${isIn ? 'in' : ''}">${isIn ? '✓ Arrived' : 'Mark In'}</button>`;
 
                 return `
-                <tr class="guest-row ${isLabel ? 'label-row' : ''}" onclick="openPartyModal('${v.id}')" data-type="${escapeHtml(actualType)}" data-sent="${escapeHtml(v.sent)}" data-in="${isIn ? 1 : 0}" data-search="${escapeHtml(`${v.first} ${v.last} ${v.email || ''} ${v.phone || ''} ${actualType} ${v.team || ''}`.toUpperCase())}">
+                <tr class="guest-row ${isLabel ? 'label-row' : ''}" onclick="openPartyModal('${v.id}')" data-type="${escapeHtml(actualType)}" data-sent="${escapeHtml(v.sent)}" data-in="${isIn ? 1 : 0}" data-shirt="${escapeHtml((v.shirtSize || '').trim() === '-' ? '' : (v.shirtSize || '').trim())}" data-search="${escapeHtml(`${v.first} ${v.last} ${v.email || ''} ${v.phone || ''} ${actualType} ${v.team || ''}`.toUpperCase())}">
                     <td class="c-name"><div class="name-cell"><span class="avatar" style="background:${avatarColor(v.first + v.last)}">${escapeHtml(((v.first || '?')[0] + (v.last || '')[0] || '').toUpperCase())}</span><div><div class="guest-name">${escapeHtml(v.first)} ${escapeHtml(v.last)}</div>${sub ? `<div class="group-sub">${sub}</div>` : ''}</div></div></td>
                     <td class="c-type"><span class="group-tag">${escapeHtml(actualType)}</span><span class="m-ticket">${ticket}</span></td>
                     <td class="c-ticket">${ticket}</td>
@@ -2588,17 +2532,20 @@
     function filterTable() { 
         const textVal = document.getElementById("search").value.trim().toUpperCase(); 
         const typeVal = document.getElementById("typeFilter")?.value || "ALL";
+        const shirtVal = document.getElementById("shirtFilter")?.value || "ALL";
         
         document.querySelectorAll("#guestTableBody tr").forEach(r => {
             const rowSent = r.getAttribute('data-sent');
             const rowIn = r.getAttribute('data-in') === '1';
             const textMatch = (r.getAttribute('data-search') || '').includes(textVal);
-            const typeMatch = typeVal === "ALL" || (typeVal === "UNSENT" ? rowSent === "No" : r.getAttribute('data-type') === typeVal);
+            const typeMatch = typeVal === "ALL" || r.getAttribute('data-type') === typeVal;
+            const rowShirt = r.getAttribute('data-shirt') || '';
+            const shirtMatch = shirtVal === "ALL" || (shirtVal === "NONE" ? (!rowShirt || rowShirt === 'N/A') && rowSent !== 'N/A' : rowShirt === shirtVal);
             const quickMatch = quickFilter === 'all'
                 || (quickFilter === 'unsent' && rowSent === 'No')
                 || (quickFilter === 'in' && rowIn)
                 || (quickFilter === 'out' && !rowIn && rowSent !== 'N/A');
-            r.style.display = (textMatch && typeMatch && quickMatch) ? "" : "none";
+            r.style.display = (textMatch && typeMatch && shirtMatch && quickMatch) ? "" : "none";
         }); 
     }
     
