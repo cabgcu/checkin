@@ -225,34 +225,29 @@
         }
         .search-wrapper .modern-input { padding-left: 40px; }
 
-        table { width: 100%; border-collapse: collapse; min-width: 1000px; }
+        table { width: 100%; border-collapse: collapse; min-width: 640px; }
         thead { background-color: rgba(0, 0, 0, 0.4); border-bottom: 1px solid var(--border-light); }
         th { padding: 16px; text-align: left; color: var(--text-muted); font-size: 12px; letter-spacing: 0.5px; text-transform: uppercase; font-weight: 600; }
         th:last-child { text-align: right; }
         td { padding: 14px 16px; vertical-align: middle; border-bottom: 1px solid var(--border-light); }
         tbody tr:last-child td { border-bottom: none; }
-        tbody tr:hover td { background-color: rgba(255,255,255,0.03); }
-        tr.label-row td { opacity: 0.6; }
+        tr.guest-row { cursor: pointer; transition: background-color 0.15s; }
+        tr.guest-row:hover td { background-color: var(--bg-hover); }
+        tr.label-row .guest-name, tr.label-row .group-tag { opacity: 0.6; }
+        td.c-checkin { text-align: right; }
+        .guest-name { font-weight: 700; font-size: 15px; }
+        .label-only { color: var(--text-muted); font-size: 0.7rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
+        .m-ticket { display: none; }
 
         .group-tag { font-size: 11px; font-weight: 700; color: #a78bfa; display: inline-block; text-transform: uppercase; background: rgba(124, 58, 237, 0.12); padding: 4px 10px; border-radius: var(--radius-button); border: 1px solid rgba(124, 58, 237, 0.3); }
         .group-sub { color: var(--text-muted); font-size: 0.72rem; margin-top: 4px; font-weight: 500; }
         .shirt-tag { color: #a78bfa; font-weight: 800; }
-        .action-wrapper { display: flex; align-items: center; justify-content: flex-end; gap: 4px; flex-wrap: nowrap; }
 
         .status-badge { font-size: 11px; font-weight: 700; padding: 5px 10px; border-radius: var(--radius-button); letter-spacing: 0.5px; text-transform: uppercase; display: inline-block; text-align: center; min-width: 60px; white-space: nowrap; }
         .status-badge.sent { color: var(--success-text); background: var(--success-bg); border: 1px solid var(--success-border); }
         .status-badge.draft { color: var(--warning-text); background: var(--warning-bg); border: 1px solid var(--warning-border); }
         .status-badge.na { color: var(--text-muted); background: var(--bg-hover); border: 1px solid var(--border-light); }
 
-        .btn-icon-sq {
-            background: transparent; border: none; color: var(--text-muted);
-            width: 32px; height: 32px; border-radius: var(--radius-md); cursor: pointer;
-            display: flex; align-items: center; justify-content: center;
-            transition: all 0.15s; flex-shrink: 0; padding: 0;
-        }
-        .btn-icon-sq:hover { background-color: var(--border-medium); color: var(--text-main); }
-        .btn-icon-sq.danger:hover { background: var(--danger-bg); color: var(--danger-text); }
-        .btn-icon-sq:disabled { opacity: 0.3; pointer-events: none; }
 
         .btn-checkin { padding: 7px 14px; font-size: 12px; white-space: nowrap; }
         .btn-checkin.in { background: var(--success-bg); color: var(--success-text); border: 1px solid var(--success-border); box-shadow: none; }
@@ -298,6 +293,18 @@
         .guest-card { background: var(--bg-hover); padding: 20px; border-radius: var(--radius-lg); margin-bottom: 15px; border: 1px solid var(--border-light); }
         .guest-card .form-grid { margin-bottom: 0; gap: 16px; }
         .party-member { border-left: 2px solid var(--brand-primary); padding-left: 15px; margin-bottom: 20px; }
+        .gd-head { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; padding-right: 40px; }
+        .gd-avatar { width: 56px; height: 56px; flex-shrink: 0; border-radius: 50%; background: var(--gradient-accent); display: flex; align-items: center; justify-content: center; font-size: 1.4rem; font-weight: 800; }
+        .gd-name { margin: 0; font-size: 1.5rem; font-weight: 800; }
+        .gd-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+        .gd-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 16px; }
+        .gd-field { background: var(--bg-hover); border: 1px solid var(--border-light); border-radius: var(--radius-lg); padding: 10px 14px; min-width: 0; }
+        .gd-field .k { font-size: 0.68rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }
+        .gd-field .v { margin-top: 4px; font-size: 0.95rem; overflow-wrap: anywhere; }
+        .gd-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .gd-party { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+        .gd-party-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 12px; border-radius: var(--radius-md); background: var(--bg-hover); border: 1px solid var(--border-light); cursor: pointer; font-size: 0.88rem; }
+        .gd-party-row.current { border-color: var(--brand-primary); background: var(--brand-primary-light); }
         .field-label { display: flex; justify-content: space-between; align-items: center; font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-bottom: 8px; }
 
         .upload-drop { background: rgba(255,255,255,0.02); border: 2px dashed var(--border-medium); border-radius: var(--radius-lg); padding: 30px; text-align: center; margin-bottom: 25px; }
@@ -484,19 +491,13 @@
             table { min-width: 0; }
             thead { display: none; }
             tbody { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
-            tbody tr { display: grid; grid-template-columns: 1fr auto; grid-template-areas: "name checkin" "group checkin" "contact contact" "actions actions"; gap: 4px 12px; padding: 14px 16px; border-radius: var(--radius-lg); background: var(--bg-surface); border: 1px solid var(--border-light); }
-            tbody tr:hover td { background: transparent; }
+            tbody tr { display: grid; grid-template-columns: 1fr auto; grid-template-areas: "name checkin" "type checkin"; gap: 6px 12px; padding: 14px 16px; border-radius: var(--radius-lg); background: var(--bg-surface); border: 1px solid var(--border-light); }
             td { display: block; border: none !important; padding: 0 !important; }
-            td.c-first { grid-area: name; font-size: 1.05rem; font-weight: 700; }
-            td.c-first .m-last { display: inline; }
-            td.c-last { display: none; }
-            td.c-group { grid-area: group; }
-            td.c-contact { grid-area: contact; color: var(--text-muted); font-size: 0.78rem; }
-            td.c-phone, td.c-email { display: none; }
-            td.c-shirt { display: none; }
+            td.c-name { grid-area: name; }
+            td.c-type { grid-area: type; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+            td.c-ticket { display: none; }
             td.c-checkin { grid-area: checkin; align-self: center; }
-            td.c-actions { grid-area: actions; border-top: 1px solid var(--border-light) !important; padding-top: 8px !important; margin-top: 6px; }
-            .action-wrapper { justify-content: space-between; }
+            .m-ticket { display: inline; }
 
             .settings-head { flex-direction: column; align-items: stretch !important; }
             .settings-tab { padding: 8px 14px; font-size: 0.8rem; flex: 1; }
@@ -508,10 +509,6 @@
             #toast { font-size: 0.9rem; padding: 14px 20px; }
             #loader { bottom: 80px; }
             .login-card { padding: 32px 24px; }
-        }
-        @media (min-width: 769px) {
-            td.c-contact { display: none; }
-            td.c-first .m-last { display: none; }
         }
     </style>
 </head>
@@ -581,11 +578,12 @@
 </div>
 
 <!-- MANAGE PARTY MODAL -->
-<div id="partyModal" class="modal-overlay">
+<div id="partyModal" class="modal-overlay" onclick="if (event.target === this) closePartyModal()">
     <div class="modal-content">
         <button class="close-modal" onclick="closePartyModal()">&times;</button>
-        <h2 style="margin-top:0; margin-bottom:10px; font-weight:800;">Manage Registration</h2>
-        <div style="font-size:0.9rem; color:var(--text-muted); margin-bottom:20px;">Edit main contact or party members. <span style="color:var(--warning-text);">Editing an email will invalidate the old ticket.</span></div>
+        <div id="guestDetail"></div>
+        <div class="section-header" style="margin-top:28px;">Edit Registration</div>
+        <div style="font-size:0.85rem; color:var(--text-muted); margin-bottom:20px;">Edit the main contact or party members. <span style="color:var(--warning-text);">Changing an email invalidates the old ticket.</span></div>
         <form id="partyForm" onsubmit="saveParty(event)">
             <div id="partyContainer"></div>
             <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap; margin-top:20px; border-top:1px solid var(--border-light); padding-top:20px;">
@@ -729,7 +727,7 @@
                 <button onclick="openCustomEmailModal()" class="btn-action secondary" style="flex: 0 0 auto; white-space: nowrap;">✉️ Custom Email</button>
             </div>
             <table>
-                <thead><tr><th>First</th><th>Last</th><th>Group</th><th>Phone</th><th>Email</th><th>Shirt</th><th>Check In</th><th>Actions</th></tr></thead>
+                <thead><tr><th>Name</th><th>Type</th><th>Ticket</th><th style="text-align:right;">Check In</th></tr></thead>
                 <tbody id="guestTableBody"></tbody>
             </table>
         </div>
@@ -1414,63 +1412,34 @@
             }
         }
         
-        const ICON_EDIT = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
-        const ICON_TICKET = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2"/><path d="M13 17v2"/><path d="M13 11v2"/></svg>`;
-        const ICON_MAIL = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>`;
-        const ICON_TRASH = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
-
         const tableBody = document.getElementById('guestTableBody');
         if (tableBody) {
             tableBody.innerHTML = currentData.vips.map(v => {
-                let isLabel = v.sent === 'N/A';
+                const isLabel = v.sent === 'N/A';
                 const isIn = v.status === 'Checked In';
-                
-                let checkInCell = isLabel 
-                    ? `<span style="color:var(--text-muted); font-size:0.7rem; font-weight:800; letter-spacing:0.1em;">LABEL ONLY</span>` 
-                    : `<button onclick="checkIn('${v.id}')" class="btn-action btn-checkin ${isIn ? 'in' : ''}">${isIn ? '✓ Arrived' : 'Mark In'}</button>`;
-                
-                // Determine the true type and subtext if they are a guest
-                let actualType = cleanTeamName(getVIPType(v));
-                let isGuestOf = (v.team || '').startsWith("Guest of ");
-                
-                let subText = '';
-                if (isGuestOf) {
-                    subText = `<div class="group-sub">${escapeHtml(v.team)}</div>`;
-                } else if (STAFF_DEPTS.includes(v.team) && v.team !== "Staff Early Access") {
-                    subText = `<div class="group-sub">Dept: ${escapeHtml(v.team)}</div>`;
-                }
-
-                const contact = [v.email, v.phone].filter(Boolean).map(escapeHtml).join(' · ');
-                const noEmail = !v.email;
+                const actualType = cleanTeamName(getVIPType(v));
+                const isGuestOf = (v.team || '').startsWith("Guest of ");
+                const sub = isGuestOf ? escapeHtml(v.team) : '';
+                const ticket = isLabel
+                    ? `<span class="status-badge na">Main Contact</span>`
+                    : `<span class="status-badge ${v.sent === 'Yes' ? 'sent' : 'draft'}">${v.sent === 'Yes' ? 'Sent' : 'Unsent'}</span>`;
+                const checkInCell = isLabel
+                    ? `<span class="label-only">Label only</span>`
+                    : `<button onclick="event.stopPropagation(); checkIn('${v.id}')" class="btn-action btn-checkin ${isIn ? 'in' : ''}">${isIn ? '✓ Arrived' : 'Mark In'}</button>`;
 
                 return `
-                <tr class="${isLabel ? 'label-row' : ''}" data-type="${escapeHtml(actualType)}" data-sent="${escapeHtml(v.sent)}">
-                    <td class="c-first"><strong>${escapeHtml(v.first)}</strong><strong class="m-last"> ${escapeHtml(v.last)}</strong></td>
-                    <td class="c-last"><strong>${escapeHtml(v.last)}</strong></td>
-                    <td class="c-group">
-                        <span class="group-tag">${escapeHtml(actualType)}</span>
-                        ${subText}
-                    </td>
-                    <td class="c-phone"><small>${escapeHtml(v.phone || '')}</small></td>
-                    <td class="c-email"><small>${escapeHtml(v.email || '')}</small></td>
-                    <td class="c-contact">${contact}</td>
-                    <td class="c-shirt"><span class="shirt-tag">${escapeHtml(v.shirtSize || '-')}</span></td>
+                <tr class="guest-row ${isLabel ? 'label-row' : ''}" onclick="openPartyModal('${v.id}')" data-type="${escapeHtml(actualType)}" data-sent="${escapeHtml(v.sent)}" data-search="${escapeHtml(`${v.first} ${v.last} ${v.email || ''} ${v.phone || ''} ${actualType} ${v.team || ''}`.toUpperCase())}">
+                    <td class="c-name"><div class="guest-name">${escapeHtml(v.first)} ${escapeHtml(v.last)}</div>${sub ? `<div class="group-sub">${sub}</div>` : ''}</td>
+                    <td class="c-type"><span class="group-tag">${escapeHtml(actualType)}</span><span class="m-ticket">${ticket}</span></td>
+                    <td class="c-ticket">${ticket}</td>
                     <td class="c-checkin">${checkInCell}</td>
-                    <td class="c-actions"><div class="action-wrapper">
-                        <span class="status-badge ${isLabel ? 'na' : (v.sent === 'Yes' ? 'sent' : 'draft')}">${isLabel ? 'Main Contact' : (v.sent === 'Yes' ? 'Ticket Sent' : 'Unsent')}</span>
-                        <div style="display:flex; gap:2px;">
-                            <button onclick="openPartyModal('${v.id}')" class="btn-icon-sq" title="Edit registration">${ICON_EDIT}</button>
-                            <button onclick="resend('${v.id}')" class="btn-icon-sq" title="Send ticket email" ${(noEmail || isLabel) ? 'disabled' : ''}>${ICON_TICKET}</button>
-                            <button onclick="openCustomEmailModal(['${v.id}'])" class="btn-icon-sq" title="Send custom email" ${noEmail ? 'disabled' : ''}>${ICON_MAIL}</button>
-                            <button onclick="removeGuest('${v.id}')" class="btn-icon-sq danger" title="Delete">${ICON_TRASH}</button>
-                        </div>
-                    </div></td>
                 </tr>`;
             }).join('');
         }
         
         // Ensure filter remains active if they refresh
         filterTable();
+        if (document.getElementById('partyModal').style.display === 'flex') renderGuestDetail();
         const unified = document.getElementById('unifiedCheckInInput');
         if (unified && document.getElementById('view-scan').style.display !== 'none') filterUnifiedCheckIn(unified.value);
     }
@@ -1481,8 +1450,66 @@
         let hostName = user.team.startsWith("Guest of ") ? user.team.replace("Guest of ", "").trim() : (user.first + " " + user.last).trim();
         const host = currentData.vips.find(v => (v.first + " " + v.last).trim() === hostName && !v.team.startsWith("Guest of ")) || user;
         currentParty = [host, ...currentData.vips.filter(v => v.team === `Guest of ${hostName}`)];
+        pendingEdits = {};
+        currentDetailId = id;
+        renderGuestDetail();
         renderPartyModal();
         document.getElementById('partyModal').style.display = 'flex';
+    }
+
+    let currentDetailId = null;
+
+    // Read-only summary + quick actions for the guest that was clicked
+    function renderGuestDetail() {
+        const el = document.getElementById('guestDetail');
+        const g = currentData.vips.find(v => v.id === currentDetailId);
+        if (!el || !g) return;
+        const isLabel = g.sent === 'N/A';
+        const isIn = g.status === 'Checked In';
+        const type = cleanTeamName(getVIPType(g));
+        const field = (k, v) => `<div class="gd-field"><div class="k">${k}</div><div class="v">${v ? escapeHtml(v) : '<span style="color:var(--text-muted);">—</span>'}</div></div>`;
+        const chips = [`<span class="group-tag">${escapeHtml(type)}</span>`,
+            isLabel ? `<span class="status-badge na">Main Contact</span>` : `<span class="status-badge ${g.sent === 'Yes' ? 'sent' : 'draft'}">${g.sent === 'Yes' ? 'Ticket Sent' : 'Ticket Unsent'}</span>`,
+            isLabel ? '' : `<span class="status-badge ${isIn ? 'sent' : 'na'}">${isIn ? 'Checked In' : 'Not Checked In'}</span>`].join('');
+        const party = currentParty.length > 1 ? `
+            <div class="section-header" style="margin-top:0;">Party (${currentParty.length})</div>
+            <div class="gd-party">${currentParty.map((m, i) => `
+                <div class="gd-party-row ${m.id === g.id ? 'current' : ''}" onclick="showPartyMemberDetail('${m.id}')">
+                    <span><strong>${escapeHtml(m.first)} ${escapeHtml(m.last)}</strong> <span style="color:var(--text-muted);">${i === 0 ? '· Main contact' : ''}</span></span>
+                    <span style="color:${m.status === 'Checked In' ? 'var(--success-text)' : 'var(--text-muted)'}; font-size:0.78rem; font-weight:700;">${m.sent === 'N/A' ? '' : (m.status === 'Checked In' ? '✓ In' : 'Not in')}</span>
+                </div>`).join('')}
+            </div>` : '';
+        el.innerHTML = `
+            <div class="gd-head">
+                <div class="gd-avatar">${escapeHtml((g.first || '?').charAt(0).toUpperCase())}</div>
+                <div><h2 class="gd-name">${escapeHtml(g.first)} ${escapeHtml(g.last)}</h2><div class="gd-chips">${chips}</div></div>
+            </div>
+            <div class="gd-grid">
+                ${field('Email', g.email)}${field('Phone', g.phone)}${field('Shirt Size', g.shirtSize && g.shirtSize !== '-' ? g.shirtSize : '')}${field('Group', g.team)}
+            </div>
+            ${party}
+            <div class="gd-actions">
+                ${isLabel ? '' : `<button type="button" class="btn-action ${isIn ? 'secondary' : ''}" onclick="detailCheckIn()">${isIn ? 'Undo Check In' : 'Mark Checked In'}</button>`}
+                ${isLabel ? '' : `<button type="button" class="btn-action secondary" onclick="resend('${g.id}')" ${g.email ? '' : 'disabled'}>🎟️ ${g.sent === 'Yes' ? 'Resend' : 'Send'} Ticket</button>`}
+                <button type="button" class="btn-action secondary" onclick="closePartyModal(); openCustomEmailModal(['${g.id}'])" ${g.email ? '' : 'disabled'}>✉️ Email</button>
+                <button type="button" class="btn-action secondary" style="color:var(--danger-text);" onclick="deleteFromDetail('${g.id}')">Delete</button>
+            </div>`;
+    }
+
+    function showPartyMemberDetail(id) { currentDetailId = id; renderGuestDetail(); }
+
+    async function detailCheckIn() {
+        await checkIn(currentDetailId);
+        renderGuestDetail();
+    }
+
+    async function deleteFromDetail(id) {
+        const g = currentData.vips.find(v => v.id === id);
+        if (!g || !confirm(`Delete ${g.first} ${g.last}?`)) return;
+        await _supabase.from('guests').delete().eq('id', id);
+        closePartyModal();
+        showToast("Deleted");
+        refreshData(null, true);
     }
 
     function renderPartyModal() {
@@ -2555,7 +2582,7 @@
         const typeVal = typeFilterEl ? typeFilterEl.value : "ALL";
         
         document.querySelectorAll("#guestTableBody tr").forEach(r => {
-            const rowText = r.innerText.toUpperCase();
+            const rowText = r.getAttribute('data-search') || '';
             const rowType = r.getAttribute('data-type');
             const rowSent = r.getAttribute('data-sent');
             
