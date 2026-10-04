@@ -29,7 +29,7 @@ alter table public.events add column if not exists template_guest_subject text;
 alter table public.events add column if not exists template_guest_body    text;
 
 
--- ── 2. Template library row in `secrets` ──────────────────────
+-- ── 2. Template library + form settings rows in `secrets` ─────
 -- The page stores its template library as one row named
 -- VIP_EMAIL_TEMPLATES_LIBRARY. These policies let the page read and
 -- write ONLY that row — BREVO_API_KEY and any other secret stay
@@ -59,6 +59,33 @@ begin
             for update to anon, authenticated
             using (name = 'VIP_EMAIL_TEMPLATES_LIBRARY')
             with check (name = 'VIP_EMAIL_TEMPLATES_LIBRARY');
+    end if;
+end $$;
+
+-- Same narrow access for the sign-up form settings row (VIP_FORMS_CONFIG),
+-- which the public sign-up page also needs to read.
+do $$
+begin
+    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'secrets'
+                   and policyname = 'vip_forms_config_select') then
+        create policy vip_forms_config_select on public.secrets
+            for select to anon, authenticated
+            using (name = 'VIP_FORMS_CONFIG');
+    end if;
+
+    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'secrets'
+                   and policyname = 'vip_forms_config_insert') then
+        create policy vip_forms_config_insert on public.secrets
+            for insert to anon, authenticated
+            with check (name = 'VIP_FORMS_CONFIG');
+    end if;
+
+    if not exists (select 1 from pg_policies where schemaname = 'public' and tablename = 'secrets'
+                   and policyname = 'vip_forms_config_update') then
+        create policy vip_forms_config_update on public.secrets
+            for update to anon, authenticated
+            using (name = 'VIP_FORMS_CONFIG')
+            with check (name = 'VIP_FORMS_CONFIG');
     end if;
 end $$;
 
