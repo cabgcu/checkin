@@ -147,8 +147,10 @@
     function shirtOptions(selected) {
         return `<option value="">Select size</option>` + VIP_FORM_SHIRT_SIZES.map(s => `<option ${s === selected ? 'selected' : ''}>${s}</option>`).join('');
     }
+    function bannerSrc() { return processImageUrl((cfg && cfg.bannerUrl) || eventRow?.banner_url || ''); }
     function bannerHtml() {
-        return eventRow?.banner_url ? `<img class="banner" src="${escapeHtml(processImageUrl(eventRow.banner_url))}" alt="">` : '';
+        const src = bannerSrc();
+        return src ? `<img class="banner" src="${escapeHtml(src)}" alt="">` : '';
     }
     function showState(kind, title, message, extra = '') {
         const icon = { ok: '✓', wait: '⏳', no: '✕' }[kind] || 'ℹ';
@@ -180,7 +182,7 @@
 
     // ── email ──────────────────────────────────────────────────
     function emailShell(heading, bodyHtml, buttonUrl, buttonText) {
-        const banner = eventRow?.banner_url ? `<tr><td style="padding:0;"><img src="${escapeHtml(processImageUrl(eventRow.banner_url))}" width="500" style="display:block;width:100%;height:auto;border:0;" alt=""></td></tr>` : '';
+        const banner = bannerSrc() ? `<tr><td style="padding:0;"><img src="${escapeHtml(bannerSrc())}" width="500" style="display:block;width:100%;height:auto;border:0;" alt=""></td></tr>` : '';
         return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
         <body style="margin:0;padding:0;background:#f3f4f6;font-family:'Segoe UI',Helvetica,Arial,sans-serif;">
         <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f3f4f6;"><tr><td align="center" style="padding:20px;">
