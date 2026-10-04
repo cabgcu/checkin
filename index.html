@@ -302,22 +302,34 @@
         .upload-drop { background: var(--inset-bg); border: 2px dashed var(--line-strong); border-radius: var(--radius-lg); padding: 28px; text-align: center; margin-bottom: 24px; }
 
         /* Guest detail */
-        .gd-head { display: flex; align-items: center; gap: 16px; margin-bottom: 20px; padding-right: 40px; }
-        .gd-avatar { width: 56px; height: 56px; flex-shrink: 0; border-radius: 50%; background: var(--accent-purple); display: flex; align-items: center; justify-content: center; font-size: 1.3rem; font-weight: 700; }
-        .gd-name { margin: 0; font-size: 22px; font-weight: 700; }
-        .gd-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
-        .gd-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; margin-bottom: 16px; }
-        .gd-field { background: var(--inset-bg); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 10px 14px; min-width: 0; }
-        .gd-field .k { font-size: 12px; color: var(--text-dim); }
-        .gd-field .v { margin-top: 4px; font-size: 14px; overflow-wrap: anywhere; }
-        .gd-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-        .gd-party { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
-        .gd-party-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 9px 14px; border-radius: 12px; background: var(--inset-bg); border: 1px solid var(--line); cursor: pointer; font-size: 13px; }
+        .gd-head { display: flex; align-items: center; gap: 18px; margin-bottom: 24px; padding-right: 44px; }
+        .gd-avatar { width: 64px; height: 64px; flex-shrink: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 700; color: #fff; }
+        .gd-name { margin: 0; font-size: 24px; font-weight: 700; line-height: 1.2; }
+        .gd-chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+        .gd-actions { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 28px; }
+        .gd-section { margin-bottom: 28px; }
+        .gd-section-title { font-size: 12px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; margin: 0 0 10px 2px; }
+        .gd-list { background: var(--inset-bg); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; }
+        .gd-row { display: flex; align-items: center; gap: 14px; padding: 16px 20px; border-bottom: 1px solid var(--line); }
+        .gd-row:last-child { border-bottom: none; }
+        .gd-row svg { width: 18px; height: 18px; flex-shrink: 0; fill: none; stroke: var(--text-dim); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+        .gd-row .k { width: 110px; flex-shrink: 0; color: var(--text-muted); font-size: 13px; }
+        .gd-row .v { flex: 1; min-width: 0; font-size: 14px; font-weight: 500; text-align: right; overflow-wrap: anywhere; }
+        .gd-row .v.empty { color: var(--text-dim); font-weight: 400; }
+        .gd-row .v a { color: #fff; text-decoration: none; }
+        .gd-row .v a:hover { color: #60a5fa; }
+        .gd-party { display: flex; flex-direction: column; gap: 8px; }
+        .gd-party-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 18px; border-radius: 14px; background: var(--inset-bg); border: 1px solid var(--line); cursor: pointer; font-size: 14px; transition: border-color 0.15s; }
+        .gd-party-row:hover { border-color: var(--line-strong); }
         .gd-party-row.current { border-color: var(--accent-purple); background: var(--brand-primary-light); }
+        .gd-party-row .who { display: flex; align-items: center; gap: 12px; min-width: 0; }
+        .gd-party-row .avatar { width: 28px; height: 28px; font-size: 11px; }
 
         /* ── MODALS ── */
-        .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.65); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); z-index: 10000; display: none; align-items: center; justify-content: center; padding: 20px; overflow-y: auto; transition: opacity 0.25s ease; }
-        .modal-content { background: #222228; border: 1px solid rgba(63,63,70,0.5); box-shadow: 0 25px 50px rgba(0,0,0,0.5); padding: 32px; border-radius: var(--radius-xl); width: 100%; max-width: 760px; position: relative; max-height: 90vh; overflow-y: auto; }
+        /* No backdrop-filter here: blurring the page behind a scrolling panel makes Safari/Chrome flash white */
+        .modal-overlay { position: fixed; inset: 0; background: rgba(9, 9, 11, 0.78); z-index: 10000; display: none; align-items: center; justify-content: center; padding: 20px; overflow: hidden; overscroll-behavior: contain; transition: opacity 0.25s ease; }
+        .modal-content { background: #222228; border: 1px solid rgba(63,63,70,0.5); box-shadow: 0 25px 50px rgba(0,0,0,0.5); padding: 32px; border-radius: var(--radius-xl); width: 100%; max-width: 760px; position: relative; max-height: 90vh; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; transform: translateZ(0); }
+        body.modal-open, body.modal-open .content { overflow: hidden; }
         .close-modal { position: absolute; top: 16px; right: 16px; width: 34px; height: 34px; border-radius: 50%; background: var(--card-bg); border: 1px solid var(--line-strong); color: var(--text-muted); font-size: 1.3rem; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 10; }
         .close-modal:hover { color: #fff; }
 
@@ -460,7 +472,10 @@
             .tab-full { display: none; }
             .tab-short { display: inline; }
             .modal-overlay { padding: 0; align-items: flex-end; }
-            .modal-content { padding: 24px 16px; border-radius: 24px 24px 0 0; max-height: 92vh; }
+            .modal-content { padding: 24px 18px calc(24px + env(safe-area-inset-bottom)); border-radius: 24px 24px 0 0; max-height: 92vh; }
+            .gd-row { padding: 14px 16px; }
+            .gd-row .k { width: 84px; }
+            .gd-actions .btn-action { flex: 1 1 calc(50% - 10px); }
             #loader { bottom: 84px; }
             #toast { bottom: 88px; }
         }
@@ -536,7 +551,7 @@
     <div class="modal-content">
         <button class="close-modal" onclick="closePartyModal()">&times;</button>
         <div id="guestDetail"></div>
-        <div class="section-header" style="margin-top:28px;">Edit Registration</div>
+        <div class="gd-section-title" style="margin-top:4px;">Edit registration</div>
         <div style="font-size:0.85rem; color:var(--text-muted); margin-bottom:20px;">Edit the main contact or party members. <span style="color:var(--warning-text);">Changing an email invalidates the old ticket.</span></div>
         <form id="partyForm" onsubmit="saveParty(event)">
             <div id="partyContainer"></div>
@@ -1361,7 +1376,6 @@
             shirtFilter.value = (prev === 'NONE' && noShirt) || sizes.includes(prev) ? prev : 'ALL';
         }
 
-        const AVATAR_COLORS = ['#8b5cf6', '#ec4899', '#2563eb', '#10b981', '#f59e0b', '#ef4444'];
         const avatarColor = (str) => AVATAR_COLORS[[...(str || '')].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 0) % AVATAR_COLORS.length];
 
         const tableBody = document.getElementById('guestTableBody');
@@ -1410,6 +1424,7 @@
     }
 
     let currentDetailId = null;
+    const AVATAR_COLORS = ['#8b5cf6', '#ec4899', '#2563eb', '#10b981', '#f59e0b', '#ef4444'];
 
     // Read-only summary + quick actions for the guest that was clicked
     function renderGuestDetail() {
@@ -1419,33 +1434,47 @@
         const isLabel = g.sent === 'N/A';
         const isIn = g.status === 'Checked In';
         const type = cleanTeamName(getVIPType(g));
-        const field = (k, v) => `<div class="gd-field"><div class="k">${k}</div><div class="v">${v ? escapeHtml(v) : '<span style="color:var(--text-muted);">—</span>'}</div></div>`;
+        const ICONS = { mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>', phone: '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/>', shirt: '<path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z"/>', group: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>', ticket: '<path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2"/><path d="M13 17v2"/><path d="M13 11v2"/>' };
+        const row = (icon, k, v, html) => `<div class="gd-row"><svg viewBox="0 0 24 24">${ICONS[icon]}</svg><span class="k">${k}</span><span class="v ${v ? '' : 'empty'}">${v ? (html || escapeHtml(v)) : 'Not provided'}</span></div>`;
         const chips = [`<span class="group-tag">${escapeHtml(type)}</span>`,
-            isLabel ? `<span class="status-badge na">Main Contact</span>` : `<span class="status-badge ${g.sent === 'Yes' ? 'sent' : 'draft'}">${g.sent === 'Yes' ? 'Ticket Sent' : 'Ticket Unsent'}</span>`,
-            isLabel ? '' : `<span class="status-badge ${isIn ? 'sent' : 'na'}">${isIn ? 'Checked In' : 'Not Checked In'}</span>`].join('');
+            isLabel ? `<span class="status-badge na">Main Contact</span>` : `<span class="status-badge ${g.sent === 'Yes' ? 'sent' : 'draft'}">${g.sent === 'Yes' ? 'Ticket sent' : 'Ticket unsent'}</span>`,
+            isLabel ? '' : `<span class="status-badge ${isIn ? 'sent' : 'na'}">${isIn ? 'Checked in' : 'Not checked in'}</span>`].join('');
+        const shirt = g.shirtSize && g.shirtSize !== '-' && g.shirtSize !== 'N/A' ? g.shirtSize : '';
+        const avatarBg = AVATAR_COLORS[[...(g.first + g.last)].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 0) % AVATAR_COLORS.length];
+        const initials = escapeHtml(((g.first || '?')[0] + ((g.last || '')[0] || '')).toUpperCase());
         const party = currentParty.length > 1 ? `
-            <div class="section-header" style="margin-top:0;">Party (${currentParty.length})</div>
-            <div class="gd-party">${currentParty.map((m, i) => `
-                <div class="gd-party-row ${m.id === g.id ? 'current' : ''}" onclick="showPartyMemberDetail('${m.id}')">
-                    <span><strong>${escapeHtml(m.first)} ${escapeHtml(m.last)}</strong> <span style="color:var(--text-muted);">${i === 0 ? '· Main contact' : ''}</span></span>
-                    <span style="color:${m.status === 'Checked In' ? 'var(--success-text)' : 'var(--text-muted)'}; font-size:0.78rem; font-weight:700;">${m.sent === 'N/A' ? '' : (m.status === 'Checked In' ? '✓ In' : 'Not in')}</span>
-                </div>`).join('')}
+            <div class="gd-section">
+                <div class="gd-section-title">Party · ${currentParty.length}</div>
+                <div class="gd-party">${currentParty.map((m, i) => `
+                    <div class="gd-party-row ${m.id === g.id ? 'current' : ''}" onclick="showPartyMemberDetail('${m.id}')">
+                        <span class="who"><span class="avatar" style="background:${AVATAR_COLORS[[...(m.first + m.last)].reduce((h, ch) => (h * 31 + ch.charCodeAt(0)) >>> 0, 0) % AVATAR_COLORS.length]}">${escapeHtml(((m.first || '?')[0] + ((m.last || '')[0] || '')).toUpperCase())}</span>
+                        <span><strong>${escapeHtml(m.first)} ${escapeHtml(m.last)}</strong>${i === 0 ? ' <span style="color:var(--text-dim);">· Main contact</span>' : ''}</span></span>
+                        <span style="color:${m.status === 'Checked In' ? 'var(--success-text)' : 'var(--text-dim)'}; font-size:13px; font-weight:500;">${m.sent === 'N/A' ? '' : (m.status === 'Checked In' ? '✓ Checked in' : 'Not in')}</span>
+                    </div>`).join('')}
+                </div>
             </div>` : '';
         el.innerHTML = `
             <div class="gd-head">
-                <div class="gd-avatar">${escapeHtml((g.first || '?').charAt(0).toUpperCase())}</div>
+                <div class="gd-avatar" style="background:${avatarBg}">${initials}</div>
                 <div><h2 class="gd-name">${escapeHtml(g.first)} ${escapeHtml(g.last)}</h2><div class="gd-chips">${chips}</div></div>
             </div>
-            <div class="gd-grid">
-                ${field('Email', g.email)}${field('Phone', g.phone)}${field('Shirt Size', g.shirtSize && g.shirtSize !== '-' ? g.shirtSize : '')}${field('Group', g.team)}
-            </div>
-            ${party}
             <div class="gd-actions">
-                ${isLabel ? '' : `<button type="button" class="btn-action ${isIn ? 'secondary' : ''}" onclick="detailCheckIn()">${isIn ? 'Undo Check In' : 'Mark Checked In'}</button>`}
-                ${isLabel ? '' : `<button type="button" class="btn-action secondary" onclick="resend('${g.id}')" ${g.email ? '' : 'disabled'}>🎟️ ${g.sent === 'Yes' ? 'Resend' : 'Send'} Ticket</button>`}
-                <button type="button" class="btn-action secondary" onclick="closePartyModal(); openCustomEmailModal(['${g.id}'])" ${g.email ? '' : 'disabled'}>✉️ Email</button>
+                ${isLabel ? '' : `<button type="button" class="btn-action ${isIn ? 'secondary' : ''}" onclick="detailCheckIn()">${isIn ? 'Undo check in' : 'Mark checked in'}</button>`}
+                ${isLabel ? '' : `<button type="button" class="btn-action secondary" onclick="resend('${g.id}')" ${g.email ? '' : 'disabled'}>${g.sent === 'Yes' ? 'Resend' : 'Send'} ticket</button>`}
+                <button type="button" class="btn-action secondary" onclick="closePartyModal(); openCustomEmailModal(['${g.id}'])" ${g.email ? '' : 'disabled'}>Email</button>
                 <button type="button" class="btn-action secondary" style="color:var(--danger-text);" onclick="deleteFromDetail('${g.id}')">Delete</button>
-            </div>`;
+            </div>
+            <div class="gd-section">
+                <div class="gd-section-title">Details</div>
+                <div class="gd-list">
+                    ${row('mail', 'Email', g.email, g.email ? `<a href="mailto:${escapeHtml(g.email)}">${escapeHtml(g.email)}</a>` : '')}
+                    ${row('phone', 'Phone', g.phone, g.phone ? `<a href="tel:${escapeHtml(g.phone)}">${escapeHtml(g.phone)}</a>` : '')}
+                    ${row('shirt', 'Shirt size', shirt)}
+                    ${row('group', 'Group', g.team)}
+                    ${isLabel ? '' : row('ticket', 'Ticket ID', '#' + String(g.id).substring(0, 8), `<span style="font-family:monospace;">#${escapeHtml(String(g.id).substring(0, 8))}</span>`)}
+                </div>
+            </div>
+            ${party}`;
     }
 
     function showPartyMemberDetail(id) { currentDetailId = id; renderGuestDetail(); }
@@ -2922,6 +2951,13 @@
             .catch(err => console.error('Camera check-in failed:', err))
             .finally(() => { _qrCooldown = false; _qrLastSeenAt = Date.now(); });
     }
+
+    // Lock the page behind any open modal so scrolling stays inside the panel
+    function syncModalScrollLock() {
+        const anyOpen = Array.from(document.querySelectorAll('.modal-overlay')).some(m => m.style.display === 'flex');
+        document.body.classList.toggle('modal-open', anyOpen);
+    }
+    new MutationObserver(syncModalScrollLock).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['style'] });
 
     window.onload = () => { 
         if (sessionStorage.getItem('cab_vip_auth') === 'true') {
