@@ -757,6 +757,7 @@
                 </select>
                 <button onclick="sendBulk()" id="blastBtn" class="btn-action">Email unsent tickets</button>
                 <button onclick="openCustomEmailModal()" class="btn-action secondary">Custom email</button>
+                <button onclick="downloadGuestsCsv()" class="btn-action secondary" title="Download every guest in this event as a spreadsheet">Download CSV</button>
             </div>
             <div class="table-scroll">
                 <table>
@@ -2771,6 +2772,87 @@
     function showToast(m) { const t = document.getElementById('toast'); if(t) { t.innerText = m; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 3000); } }
     
     let quickFilter = 'all';
+
+    // --- CSV EXPORT: every guest in the active event, grouped by VIP type and party ---
+    function downloadGuestsCsv() {
+        const vips = currentData.vips;
+        if (!vips.length) { showToast("No guests to export yet."); return; }
+        const SIZE_ORDER = ["Small", "Medium", "Large", "X-Large", "XX-Large", "XXX-Large"];
+        const sizeOf = v => { const sz = (v.shirtSize || '').trim(); return sz && sz !== '-' && sz !== 'N/A' ? sz : ''; };
+        const nameOf = v => `${v.first || ''} ${v.last || ''}`.trim();
+
+        // Main contact for each row, so parties stay together
+        const hosts = vips.filter(v => !(v.team || '').startsWith('Guest of '));
+        const hostFor = v => {
+            if (!(v.team || '').startsWith('Guest of ')) return v;
+            const hostName = v.team.replace('Guest of ', '').trim();
+            return hosts.find(h => nameOf(h) === hostName) || null;
+        };
+
+        const rows = vips.map(v => {
+            const host = hostFor(v);
+            const isHost = host && host.id === v.id;
+            return {
+                type: cleanTeamName(getVIPType(v)),
+                party: host ? nameOf(host) : (v.team || '').replace('Guest of ', ''),
+                isHost,
+                v
+            };
+        }).sort((a, b) =>
+            a.type.localeCompare(b.type) ||
+            a.party.localeCompare(b.party) ||
+            (b.isHost - a.isHost) ||
+            nameOf(a.v).localeCompare(nameOf(b.v)));
+
+        const header = ['VIP Type', 'Party (Main Contact)', 'Role', 'First Name', 'Last Name', 'Email', 'Phone', 'Shirt Size', 'Group / Department', 'Ticket', 'Checked In', 'Ticket ID'];
+        const lines = [header];
+        rows.forEach(({ type, party, isHost, v }) => {
+            lines.push([
+                type, party, isHost ? 'Main contact' : 'Guest',
+                v.first || '', v.last || '', v.email || '', v.phone || '', sizeOf(v),
+                v.team || '',
+                v.sent === 'N/A' ? 'Label only' : (v.sent === 'Yes' ? 'Sent' : 'Unsent'),
+                v.sent === 'N/A' ? '' : (v.status === 'Checked In' ? 'Yes' : 'No'),
+                v.sent === 'N/A' ? '' : v.id
+            ]);
+        });
+
+        // Shirt size totals per VIP type
+        const sizes = [...new Set(vips.map(sizeOf).filter(Boolean))].sort((a, b) => {
+            const ia = SIZE_ORDER.indexOf(a), ib = SIZE_ORDER.indexOf(b);
+            return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib) || a.localeCompare(b);
+        });
+        if (sizes.length) {
+            const types = [...new Set(rows.map(r => r.type))];
+            const count = (type, size) => rows.filter(r => (!type || r.type === type) && sizeOf(r.v) === size).length;
+            lines.push([], ['Shirt Size Totals'], ['VIP Type', ...sizes, 'No Size', 'Total']);
+            types.forEach(t => {
+                const ofType = rows.filter(r => r.type === t && r.v.sent !== 'N/A');
+                const withSize = sizes.reduce((n, sz) => n + count(t, sz), 0);
+                lines.push([t, ...sizes.map(sz => count(t, sz)), ofType.length - withSize, ofType.length]);
+            });
+            const ticketed = rows.filter(r => r.v.sent !== 'N/A').length;
+            const totalSized = sizes.reduce((n, sz) => n + count(null, sz), 0);
+            lines.push(['All types', ...sizes.map(sz => count(null, sz)), ticketed - totalSized, ticketed]);
+        }
+
+        const cell = c => {
+            const str = String(c ?? '');
+            // Quote when needed; prefix formula-like text so spreadsheets don't execute it
+            const safe = /^[=@\t\r]/.test(str) || /^[+\-](?![\d\s().\-]+$)/.test(str) ? "'" + str : str;
+            return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
+        };
+        const csv = '﻿' + lines.map(r => r.map(cell).join(',')).join('\r\n');
+        const slug = (currentData.activeEventName || 'event').replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase();
+        const date = new Date().toISOString().slice(0, 10);
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+        a.download = `${slug}-guests-${date}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+        showToast(`Downloaded ${rows.length} guests`);
+    }
 
     function setQuickFilter(q) {
         quickFilter = q;
