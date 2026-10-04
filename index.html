@@ -231,6 +231,9 @@
         .filter-row { display: flex; gap: 10px; align-items: center; padding: 20px 24px; flex-wrap: wrap; }
         .filter-row h2 { margin: 0 auto 0 0; font-size: 17px; font-weight: 600; }
         .filter-row select.modern-input { width: auto; min-width: 170px; border-radius: 9999px; }
+        .filter-row-2 { padding-top: 0; }
+        .table-search { flex: 1; width: auto; min-width: 220px; }
+        .app-header .header-actions { margin-left: auto; }
         .table-scroll { overflow-x: auto; }
         table { width: 100%; border-collapse: collapse; min-width: 640px; }
         th { padding: 10px 24px; text-align: left; color: var(--text-dim); font-size: 12px; font-weight: 500; border-bottom: 1px solid var(--line); }
@@ -435,7 +438,7 @@
 
         /* ── RESPONSIVE ── */
         @media (max-width: 1100px) {
-            .header-search { width: 240px; }
+            .header-search:not(.table-search) { width: 240px; }
             .header-actions .btn-action span.lbl { display: none; }
         }
         @media (max-width: 768px) {
@@ -443,9 +446,12 @@
             .sidebar { display: none; }
             .main { height: auto; overflow: visible; }
             .app-header { position: sticky; top: 0; z-index: 50; background: var(--app-bg); padding: 12px 16px; padding-top: calc(12px + env(safe-area-inset-top)); gap: 10px; }
-            .header-search { width: auto; flex: 1; }
-            .app-header { flex-wrap: wrap; }
-            .mobile-event { display: block; width: 100%; padding: 0; }
+            .app-header { flex-wrap: nowrap; }
+            .app-header .header-actions { margin-left: 0; }
+            .mobile-event { display: block; flex: 1; min-width: 0; padding: 0; }
+            .filter-row-2 { padding-top: 0; }
+            .table-search { flex: 1 1 100%; min-width: 0; }
+            .table-search input { height: 46px; font-size: 16px; }
             .mobile-event label { display: none; }
             .mobile-event select { font-size: 16px; padding: 12px 36px 12px 14px; border-radius: 9999px; }
             .header-actions .btn-action, .header-actions .icon-btn.desk { display: none; }
@@ -691,10 +697,6 @@
                 <label for="eventDropdownMobile">Active event</label>
                 <select id="eventDropdownMobile" onchange="switchEvent(this.value)"></select>
             </div>
-            <div class="header-search">
-                <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                <input type="text" id="search" placeholder="Search guests" oninput="onHeaderSearch()">
-            </div>
             <div class="header-actions">
                 <button class="btn-action" onclick="toggleView('add')"><svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg><span class="lbl">Add registration</span></button>
                 <button class="icon-btn desk" title="Custom email" onclick="openCustomEmailModal()"><svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg></button>
@@ -742,15 +744,21 @@
         <div class="table-container">
             <div class="filter-row">
                 <h2>Guests</h2>
+                <button onclick="sendBulk()" id="blastBtn" class="btn-action">Email unsent tickets</button>
+                <button onclick="openCustomEmailModal()" class="btn-action secondary">Custom email</button>
+                <button onclick="downloadGuestsCsv()" class="btn-action secondary" title="Download every guest in this event as a spreadsheet">Download CSV</button>
+            </div>
+            <div class="filter-row filter-row-2">
+                <div class="header-search table-search">
+                    <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                    <input type="text" id="search" placeholder="Search name, email or group" oninput="filterTable()">
+                </div>
                 <select id="typeFilter" class="modern-input" onchange="filterTable()">
                     <option value="ALL">All types</option>
                 </select>
                 <select id="shirtFilter" class="modern-input" onchange="filterTable()">
                     <option value="ALL">All shirt sizes</option>
                 </select>
-                <button onclick="sendBulk()" id="blastBtn" class="btn-action">Email unsent tickets</button>
-                <button onclick="openCustomEmailModal()" class="btn-action secondary">Custom email</button>
-                <button onclick="downloadGuestsCsv()" class="btn-action secondary" title="Download every guest in this event as a spreadsheet">Download CSV</button>
             </div>
             <div class="table-scroll">
                 <table>
@@ -2829,11 +2837,6 @@
     function setQuickFilter(q) {
         quickFilter = q;
         document.querySelectorAll('#quickFilterSeg button').forEach(b => b.classList.toggle('on', b.dataset.q === q));
-        filterTable();
-    }
-
-    function onHeaderSearch() {
-        if (document.getElementById('view-list').style.display === 'none') toggleView('list');
         filterTable();
     }
 
