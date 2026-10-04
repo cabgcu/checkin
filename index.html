@@ -135,6 +135,7 @@
             background-repeat: no-repeat; background-position: right 10px center; background-size: 14px;
         }
         .side-event select option { background: var(--card-bg); }
+        .mobile-event { display: none; }
 
         .side-nav { display: flex; flex-direction: column; gap: 4px; }
         .nav-link {
@@ -448,6 +449,10 @@
             .main { height: auto; overflow: visible; }
             .app-header { position: sticky; top: 0; z-index: 50; background: var(--app-bg); padding: 12px 16px; padding-top: calc(12px + env(safe-area-inset-top)); gap: 10px; }
             .header-search { width: auto; flex: 1; }
+            .app-header { flex-wrap: wrap; }
+            .mobile-event { display: block; width: 100%; padding: 0; }
+            .mobile-event label { display: none; }
+            .mobile-event select { font-size: 16px; padding: 12px 36px 12px 14px; border-radius: 9999px; }
             .header-actions .btn-action, .header-actions .icon-btn.desk { display: none; }
             .content { overflow: visible; padding: 16px 16px 96px; }
             .mobile-bottom-nav { display: flex; }
@@ -691,6 +696,11 @@
     <main class="main">
         <!-- HEADER -->
         <header class="app-header">
+            <!-- Phones: the sidebar is hidden, so the event picker lives here -->
+            <div class="mobile-event side-event">
+                <label for="eventDropdownMobile">Active event</label>
+                <select id="eventDropdownMobile" onchange="switchEvent(this.value)"></select>
+            </div>
             <div class="header-search">
                 <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                 <input type="text" id="search" placeholder="Search guests" oninput="onHeaderSearch()">
@@ -893,7 +903,7 @@
 
             <!-- TAB: SIGN-UP FORMS -->
             <div id="settings-tab-forms" class="settings-section" style="display:none;">
-                <p class="page-sub" style="margin-top:-8px;">Public sign-up forms for the active event. Registrations show up in the guest list right away, and each main contact gets a private link to edit their guests.</p>
+                <p class="page-sub" style="margin-top:-8px;">Public sign-up forms for the active event. Registrations show up in the guest list right away. To edit later, a main contact confirms the first name, last name and email they registered with.</p>
                 <div id="formsList"></div>
             </div>
 
@@ -1329,8 +1339,11 @@
     }
 
     function renderUI() {
-        const dropdown = document.getElementById('eventDropdown');
-        if (dropdown) dropdown.innerHTML = currentData.allEvents.map(e => `<option value="${e.id}" ${e.id == currentData.activeId ? 'selected' : ''}>${escapeHtml(e.name)}</option>`).join('');
+        const eventOptions = currentData.allEvents.map(e => `<option value="${e.id}" ${e.id == currentData.activeId ? 'selected' : ''}>${escapeHtml(e.name)}</option>`).join('');
+        ['eventDropdown', 'eventDropdownMobile'].forEach(id => {
+            const dropdown = document.getElementById(id);
+            if (dropdown && document.activeElement !== dropdown) dropdown.innerHTML = eventOptions;
+        });
         
         // Exclude 'Label Only' contacts from stats calculations
         const checkableVips = currentData.vips.filter(v => v.sent !== 'N/A');
@@ -1491,7 +1504,7 @@
                 ${isLabel ? '' : `<button type="button" class="btn-action ${isIn ? 'secondary' : ''}" onclick="detailCheckIn()">${isIn ? 'Undo check in' : 'Mark checked in'}</button>`}
                 ${isLabel ? '' : `<button type="button" class="btn-action secondary" onclick="resend('${g.id}')" ${g.email ? '' : 'disabled'}>${g.sent === 'Yes' ? 'Resend' : 'Send'} ticket</button>`}
                 <button type="button" class="btn-action secondary" onclick="closePartyModal(); openCustomEmailModal(['${g.id}'])" ${g.email ? '' : 'disabled'}>Email</button>
-                ${vipFormTypeForTeam(currentParty[0]?.team) ? `<button type="button" class="btn-action secondary" onclick="copyText(vipFormLink(location.href, { manage: '${currentParty[0].id}' }), 'Edit link copied')" title="Private link the main contact uses to edit this registration">Copy edit link</button>` : ''}
+                ${vipFormTypeForTeam(currentParty[0]?.team) ? `<button type="button" class="btn-action secondary" onclick="copyText(vipFormLink(location.href, { event: currentData.activeId, form: vipFormTypeForTeam(currentParty[0].team), edit: '1' }), 'Edit page link copied')" title="Page where the main contact confirms their name and email to edit">Copy edit page link</button>` : ''}
                 <button type="button" class="btn-action secondary" style="color:var(--danger-text);" onclick="deleteFromDetail('${g.id}')">Delete</button>
             </div>
             <div class="gd-section">
@@ -2177,7 +2190,7 @@
                     <div class="fc-checks">
                         <label class="check-row"><input type="checkbox" ${f('askPhone')} ${cfg.askPhone ? 'checked' : ''}> Ask for a phone number</label>
                         <label class="check-row"><input type="checkbox" ${f('askShirt')} ${cfg.askShirt ? 'checked' : ''}> Ask for shirt sizes</label>
-                        <label class="check-row"><input type="checkbox" ${f('allowEdits')} ${cfg.allowEdits ? 'checked' : ''}> Let people edit their registration with their private link</label>
+                        <label class="check-row"><input type="checkbox" ${f('allowEdits')} ${cfg.allowEdits ? 'checked' : ''}> Let people edit their registration (they confirm their name and email)</label>
                         <div class="sub"><span class="stat-label" style="margin:0;">Edits allowed until</span><input type="datetime-local" class="modern-input" style="max-width:240px;" ${f('editsUntil')} value="${isoToLocalInput(cfg.editsUntil)}"><span class="stat-label" style="margin:0;">(blank = no deadline)</span></div>
                     </div>
                     <label class="stat-label">Message when the form is closed</label>

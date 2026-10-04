@@ -88,8 +88,8 @@
 
         .error { color: var(--danger-text); font-size: 14px; margin-top: 14px; min-height: 1px; }
         .lost { margin-top: 20px; text-align: center; font-size: 14px; color: var(--text-muted); }
-        .lost-panel { margin-top: 14px; display: none; gap: 10px; }
-        .lost-panel.on { display: flex; }
+        .verify { display: none; margin-top: 16px; text-align: left; background: var(--inset-bg); border: 1px solid var(--line); border-radius: 18px; padding: 18px; }
+        .verify.on { display: block; }
         .spinner { width: 28px; height: 28px; margin: 60px auto; border: 3px solid rgba(255,255,255,0.12); border-top-color: var(--accent-purple); border-radius: 50%; animation: spin 0.8s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
         #toast { position: fixed; left: 50%; bottom: 28px; transform: translate(-50%, 12px); background: #fff; color: #18181b; padding: 13px 22px; border-radius: 9999px; font-weight: 600; font-size: 14px; opacity: 0; pointer-events: none; transition: 0.2s; box-shadow: 0 20px 40px rgba(0,0,0,0.4); }
@@ -98,7 +98,6 @@
             .card-body { padding: 22px 18px; }
             .grid { grid-template-columns: 1fr; }
             h1 { font-size: 22px; }
-            .lost-panel { flex-direction: column; }
         }
     </style>
 </head>
@@ -156,7 +155,7 @@
         const icon = { ok: '✓', wait: '⏳', no: '✕' }[kind] || 'ℹ';
         app.innerHTML = `${bannerHtml()}<div class="state"><div class="icon ${kind}">${icon}</div><h1>${escapeHtml(title)}</h1><p>${escapeHtml(message)}</p>${extra}</div>`;
     }
-    function manageUrl(hostId) { return vipFormLink(location.href, { manage: hostId }); }
+    const pageFormType = params.get('form');
 
     async function loadFormsStore() {
         const { data } = await _supabase.from('secrets').select('value').eq('name', VIP_FORMS_KEY).maybeSingle();
@@ -208,39 +207,63 @@
     }
 
     function sendConfirmation(host, guests) {
-        const link = manageUrl(host.id);
+        const link = editPageUrl();
         const list = guests.length
             ? `<p style="margin:16px 0 6px;"><b>Your guests:</b></p><ul style="margin:0;padding-left:20px;">${guests.map(g => `<li>${escapeHtml(fullName(g))}</li>`).join('')}</ul>`
             : '';
         const body = `<p style="margin:0 0 12px;">Hi ${escapeHtml(host.first_name)},</p>
             <p style="margin:0;">You're registered for <b>${escapeHtml(eventRow.name)}</b> (${escapeHtml(VIP_FORM_TYPES[formType].label)}).${guests.length ? ' Each guest will receive their own ticket by email before the event.' : ' Your ticket will be emailed to you before the event.'}</p>
             ${list}
-            <p style="margin:16px 0 0;">Need to change something? Use the button below to view or edit your registration.</p>`;
+            ${vipFormCanEdit(cfg) ? `<p style="margin:16px 0 0;">Need to change something? Use the button below and confirm your first name, last name and this email address.</p>` : ''}`;
         return sendEmail(host.email, fullName(host), `You're registered: ${eventRow.name}`,
-            emailShell("You're registered", body, link, 'View or edit registration'),
-            `Hi ${host.first_name},\n\nYou're registered for ${eventRow.name}.\n\nView or edit your registration: ${link}`);
+            emailShell("You're registered", body, link, vipFormCanEdit(cfg) ? 'Edit your registration' : 'View registration page'),
+            `Hi ${host.first_name},\n\nYou're registered for ${eventRow.name}.\n\nTo make changes, go to ${link} and confirm your name and email.`);
     }
 
-    function sendManageLink(host) {
-        const link = manageUrl(host.id);
-        const body = `<p style="margin:0 0 12px;">Hi ${escapeHtml(host.first_name)},</p><p style="margin:0;">Here's your private link to view or edit your registration for <b>${escapeHtml(eventRow.name)}</b>. Don't share it — anyone with this link can change your registration.</p>`;
-        return sendEmail(host.email, fullName(host), `Your registration link: ${eventRow.name}`,
-            emailShell('Your registration', body, link, 'View or edit registration'),
-            `Hi ${host.first_name},\n\nView or edit your registration for ${eventRow.name}: ${link}`);
+    // ── "Edit your registration": confirm first name, last name and email ──
+    function editPageUrl(openEdit = true) {
+        const url = new URL(vipFormLink(location.href, { event: eventRow.id, form: pageFormType || formType }));
+        url.searchParams.delete('edit');
+        if (openEdit) url.searchParams.set('edit', '1');
+        return url.toString();
     }
 
-    // "Lost your link?" — always answers the same way so it can't be used to look up who's registered
-    function lostLinkHtml() {
-        return `<div class="lost">Already registered? <button class="link" onclick="document.getElementById('lostPanel').classList.toggle('on')">Get your edit link</button>
-            <div class="lost-panel" id="lostPanel"><input type="email" id="lostEmail" placeholder="Email you registered with"><button class="btn secondary" onclick="requestManageLink()">Send link</button></div></div>`;
+    function editPanelHtml(prefill = {}, open = false) {
+        if (!vipFormCanEdit(cfg)) return '';
+        return `<div class="lost">Already registered? <button class="link" onclick="document.getElementById('editPanel').classList.toggle('on')">Edit your registration</button>
+            <div class="verify ${open ? 'on' : ''}" id="editPanel">
+                <p class="muted" style="margin:0 0 12px; font-size:13px;">Enter the name and email you registered with.</p>
+                <div class="grid">
+                    <div class="field"><label>First name</label><input id="vFirst" autocomplete="given-name" value="${escapeHtml(prefill.first || '')}"></div>
+                    <div class="field"><label>Last name</label><input id="vLast" autocomplete="family-name" value="${escapeHtml(prefill.last || '')}"></div>
+                    <div class="field full"><label>Email</label><input type="email" id="vEmail" autocomplete="email" value="${escapeHtml(prefill.email || '')}"></div>
+                </div>
+                <div class="error" id="verifyError"></div>
+                <button class="btn block" style="margin-top:12px;" id="verifyBtn" onclick="verifyAndEdit()">Find my registration</button>
+            </div></div>`;
     }
-    async function requestManageLink() {
-        const email = document.getElementById('lostEmail').value.trim();
-        if (!isEmail(email)) { toast('Enter a valid email'); return; }
-        const hosts = await findHostsByEmail(eventRow.id, email);
-        await Promise.all(hosts.map(sendManageLink));
-        toast("If you're registered, we've emailed your link");
-        document.getElementById('lostPanel').classList.remove('on');
+
+    async function verifyAndEdit() {
+        const err = document.getElementById('verifyError');
+        const btn = document.getElementById('verifyBtn');
+        const norm = (v) => (v || '').trim().toLowerCase().replace(/\s+/g, ' ');
+        const first = norm(document.getElementById('vFirst').value);
+        const last = norm(document.getElementById('vLast').value);
+        const email = document.getElementById('vEmail').value.trim();
+        err.textContent = '';
+        if (!first || !last || !isEmail(email)) { err.textContent = 'Enter your first name, last name and email.'; return; }
+        btn.disabled = true; btn.textContent = 'Checking…';
+        try {
+            const match = (await findHostsByEmail(eventRow.id, email))
+                .find(h => norm(h.first_name) === first && norm(h.last_name) === last);
+            if (!match) {
+                err.textContent = "We couldn't find a registration with that name and email. Use exactly what you registered with, or contact the CAB Special Events team.";
+                return;
+            }
+            await initManage(match.id);
+        } finally {
+            if (document.body.contains(btn)) { btn.disabled = false; btn.textContent = 'Find my registration'; }
+        }
     }
 
     // ── sign-up form ───────────────────────────────────────────
@@ -297,7 +320,7 @@
                 <div class="error" id="formError"></div>
                 <div class="actions"><button type="submit" class="btn block" id="submitBtn">Submit registration</button></div>
             </form>
-            ${lostLinkHtml()}
+            ${editPanelHtml({}, params.get('edit') === '1')}
         </div>`;
         if (cfg.guestLimit > 0) { if (!def.ticketedHost) addGuestBlock(); updateGuestButton(); }
         document.getElementById('signupForm').addEventListener('submit', submitSignup);
@@ -340,8 +363,10 @@
 
             const existing = await findHostsByEmail(eventRow.id, host.email);
             if (existing.length) {
-                await Promise.all(existing.map(sendManageLink));
-                showState('wait', "You're already registered", `We found a registration for ${host.email} and emailed you a link to view or edit it.`);
+                showState('wait', "You're already registered", vipFormCanEdit(cfg)
+                    ? `There's already a registration for ${host.email}. Confirm your name and email below to view or change it.`
+                    : `There's already a registration for ${host.email}. Contact the CAB Special Events team if something needs to change.`,
+                    editPanelHtml({ first: host.first, last: host.last, email: host.email }, true));
                 return;
             }
 
@@ -364,11 +389,10 @@
                 guestRows = data || [];
             }
 
-            const emailed = await sendConfirmation(hostRow, guestRows);
-            const link = manageUrl(hostRow.id);
+            await sendConfirmation(hostRow, guestRows);
             const party = [hostRow, ...guestRows].map(g => `<li><span>${escapeHtml(fullName(g))}</span><span class="muted">${g.id === hostRow.id ? (def.ticketedHost ? 'You' : 'Main contact') : 'Guest'}</span></li>`).join('');
-            showState('ok', "You're registered!", cfg.successMessage + (emailed ? '' : '\n\nSave the link below — you can use it to edit your registration.'),
-                `<ul class="party-list">${party}</ul><div class="actions" style="justify-content:center;"><a class="btn" href="${escapeHtml(link)}">View or edit registration</a></div>`);
+            showState('ok', "You're registered!", cfg.successMessage,
+                `<ul class="party-list">${party}</ul>${vipFormCanEdit(cfg) ? `<div class="actions" style="justify-content:center;"><button class="btn secondary" onclick="initManage('${hostRow.id}')">Review or edit registration</button></div>` : ''}`);
         } catch (ex) {
             console.error(ex);
             err.textContent = 'Something went wrong saving your registration. Please try again.';
@@ -380,9 +404,9 @@
         const st = vipFormState(cfg);
         if (st.reason === 'not_yet') {
             const when = new Date(cfg.opensAt).toLocaleString(undefined, { weekday: 'long', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-            showState('wait', cfg.title, `Registration opens ${when}.`, lostLinkHtml());
+            showState('wait', cfg.title, `Registration opens ${when}.`, editPanelHtml({}, params.get('edit') === '1'));
         } else {
-            showState('no', 'Registration is closed', cfg.closedMessage, lostLinkHtml());
+            showState('no', 'Registration is closed', cfg.closedMessage, editPanelHtml({}, params.get('edit') === '1'));
         }
     }
 
@@ -392,7 +416,7 @@
     async function initManage(hostId) {
         const { data: host } = await _supabase.from('guests').select('*').eq('id', hostId).maybeSingle();
         if (!host || (host.team || '').startsWith('Guest of ')) {
-            showState('no', 'Link not found', "This link isn't valid anymore. If you registered, use the form link to request a new one, or contact the CAB Special Events team.");
+            showState('no', 'Registration not found', "We couldn't find this registration. Contact the CAB Special Events team for help.");
             return;
         }
         eventRow = await loadEvent(host.event_id);
@@ -433,7 +457,7 @@
         };
 
         app.innerHTML = `${bannerHtml()}<div class="card-body">
-            <h1>Your registration</h1>
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;"><h1 style="margin:0;">Your registration</h1><a class="link" href="${escapeHtml(editPageUrl(false))}" style="text-decoration:none; white-space:nowrap;">Done</a></div>
             <p class="intro">${escapeHtml(eventRow.name)}${def ? ' · ' + escapeHtml(def.label) : ''}</p>
             ${canEdit ? '' : `<div class="note">${cfg ? 'Changes are closed for this registration.' : "This registration can't be edited online."} Contact the CAB Special Events team if something needs to change.</div>`}
             <div class="section-title">${def?.ticketedHost ? 'Your info' : 'Main contact'}${def?.ticketedHost ? statusChip(h) : ''}</div>
@@ -563,9 +587,7 @@
     // ── start ──────────────────────────────────────────────────
     (async function init() {
         try {
-            if (params.get('manage')) return await initManage(params.get('manage'));
-
-            formType = params.get('form');
+            formType = pageFormType;
             const eventId = params.get('event');
             if (!eventId || !VIP_FORM_TYPES[formType]) {
                 showState('no', 'Link not valid', 'This registration link is incomplete. Please use the link CAB shared with you.');
