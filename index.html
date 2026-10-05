@@ -25,6 +25,8 @@
             --app-bg: #131316;
             --card-bg: rgba(28, 28, 34, 0.68);
             --solid-bg: #1c1c22;
+            --modal-bg: rgba(28, 28, 34, 0.62);
+            --modal-backdrop: linear-gradient(rgba(9, 9, 11, 0.4), rgba(9, 9, 11, 0.4)), #131316 url('https://i.imgur.com/APGH0Wv.png') center / cover no-repeat;
             --sidebar-bg: rgba(22, 22, 26, 0.6);
             --highlight-bg: rgba(255, 255, 255, 0.1);
             --inset-bg: rgba(12, 12, 16, 0.45);
@@ -343,8 +345,10 @@
 
         /* ── MODALS ── */
         /* No backdrop-filter here: blurring the page behind a scrolling panel makes Safari/Chrome flash white */
-        .modal-overlay { position: fixed; inset: 0; background: rgba(9, 9, 11, 0.78); z-index: 10000; display: none; align-items: center; justify-content: center; padding: 20px; overflow: hidden; overscroll-behavior: contain; transition: opacity 0.25s ease; }
-        .modal-content { background: rgba(34, 34, 40, 0.94); border: 1px solid rgba(63,63,70,0.5); box-shadow: 0 25px 50px rgba(0,0,0,0.5); padding: 32px; border-radius: var(--radius-xl); width: 100%; max-width: 760px; position: relative; max-height: 90vh; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; transform: translateZ(0); }
+        /* Pop-ups sit on the background photo itself (darker tint) rather than a flat black
+           wash, so their see-through panels show it the same way the dashboard cards do. */
+        .modal-overlay { position: fixed; inset: 0; background: var(--modal-backdrop); z-index: 10000; display: none; align-items: center; justify-content: center; padding: 20px; overflow: hidden; overscroll-behavior: contain; transition: opacity 0.25s ease; }
+        .modal-content { background: var(--modal-bg); border: 1px solid rgba(63,63,70,0.5); box-shadow: 0 25px 50px rgba(0,0,0,0.5); padding: 32px; border-radius: var(--radius-xl); width: 100%; max-width: 760px; position: relative; max-height: 90vh; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; transform: translateZ(0); }
         body.modal-open, body.modal-open .main { overflow: hidden; }
         .close-modal { position: absolute; top: 16px; right: 16px; width: 34px; height: 34px; border-radius: 50%; background: var(--card-bg); border: 1px solid var(--line-strong); color: var(--text-muted); font-size: 1.3rem; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 10; }
         .close-modal:hover { color: #fff; }
