@@ -207,7 +207,7 @@
     }
 
     function sendConfirmation(host, guests) {
-        const link = editPageUrl();
+        const link = editPageUrl(true, { first: host.first_name, last: host.last_name, email: host.email });
         const list = guests.length
             ? `<p style="margin:16px 0 6px;"><b>Your guests:</b></p><ul style="margin:0;padding-left:20px;">${guests.map(g => `<li>${escapeHtml(fullName(g))}</li>`).join('')}</ul>`
             : '';
@@ -221,11 +221,39 @@
     }
 
     // ── "Edit your registration": confirm first name, last name and email ──
-    function editPageUrl(openEdit = true) {
+    // who = { first, last, email }: the confirmation email carries these so its button
+    // opens that person's registration directly (same check as typing them in).
+    function editPageUrl(openEdit = true, who = null) {
         const url = new URL(vipFormLink(location.href, { event: eventRow.id, form: pageFormType || formType }));
-        url.searchParams.delete('edit');
+        ['edit', 'f', 'l', 'e'].forEach(k => url.searchParams.delete(k));
         if (openEdit) url.searchParams.set('edit', '1');
+        if (who) { url.searchParams.set('f', who.first || ''); url.searchParams.set('l', who.last || ''); url.searchParams.set('e', who.email || ''); }
         return url.toString();
+    }
+
+    const normName = (v) => (v || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    async function findRegistration(first, last, email) {
+        if (!normName(first) || !normName(last) || !isEmail((email || '').trim())) return null;
+        return (await findHostsByEmail(eventRow.id, email.trim()))
+            .find(h => normName(h.first_name) === normName(first) && normName(h.last_name) === normName(last)) || null;
+    }
+
+    // Full-page "find my registration" screen (where the email button and edit links land)
+    function renderEditScreen(prefill = {}, message = '') {
+        const canSignUp = vipFormState(cfg).open;
+        app.innerHTML = `${bannerHtml()}<div class="card-body">
+            <h1>Edit your registration</h1>
+            <p class="intro">Enter the first name, last name and email you registered with to view or change your guests.</p>
+            <div class="grid" style="margin-top:20px;">
+                <div class="field"><label>First name</label><input id="vFirst" autocomplete="given-name" value="${escapeHtml(prefill.first || '')}"></div>
+                <div class="field"><label>Last name</label><input id="vLast" autocomplete="family-name" value="${escapeHtml(prefill.last || '')}"></div>
+                <div class="field full"><label>Email</label><input type="email" id="vEmail" autocomplete="email" value="${escapeHtml(prefill.email || '')}"></div>
+            </div>
+            <div class="error" id="verifyError">${escapeHtml(message)}</div>
+            <div class="actions"><button class="btn block" id="verifyBtn" onclick="verifyAndEdit()">Find my registration</button></div>
+            ${canSignUp ? `<div class="lost">Not registered yet? <button class="link" onclick="renderSignup()">Sign up instead</button></div>` : ''}
+        </div>`;
+        document.getElementById('vEmail').addEventListener('keydown', e => { if (e.key === 'Enter') verifyAndEdit(); });
     }
 
     function editPanelHtml(prefill = {}, open = false) {
@@ -246,16 +274,14 @@
     async function verifyAndEdit() {
         const err = document.getElementById('verifyError');
         const btn = document.getElementById('verifyBtn');
-        const norm = (v) => (v || '').trim().toLowerCase().replace(/\s+/g, ' ');
-        const first = norm(document.getElementById('vFirst').value);
-        const last = norm(document.getElementById('vLast').value);
+        const first = document.getElementById('vFirst').value;
+        const last = document.getElementById('vLast').value;
         const email = document.getElementById('vEmail').value.trim();
         err.textContent = '';
-        if (!first || !last || !isEmail(email)) { err.textContent = 'Enter your first name, last name and email.'; return; }
+        if (!normName(first) || !normName(last) || !isEmail(email)) { err.textContent = 'Enter your first name, last name and email.'; return; }
         btn.disabled = true; btn.textContent = 'Checking…';
         try {
-            const match = (await findHostsByEmail(eventRow.id, email))
-                .find(h => norm(h.first_name) === first && norm(h.last_name) === last);
+            const match = await findRegistration(first, last, email);
             if (!match) {
                 err.textContent = "We couldn't find a registration with that name and email. Use exactly what you registered with, or contact the CAB Special Events team.";
                 return;
@@ -320,7 +346,7 @@
                 <div class="error" id="formError"></div>
                 <div class="actions"><button type="submit" class="btn block" id="submitBtn">Submit registration</button></div>
             </form>
-            ${editPanelHtml({}, params.get('edit') === '1')}
+            ${editPanelHtml()}
         </div>`;
         if (cfg.guestLimit > 0) { if (!def.ticketedHost) addGuestBlock(); updateGuestButton(); }
         document.getElementById('signupForm').addEventListener('submit', submitSignup);
@@ -599,6 +625,23 @@
             document.getElementById('eventName').textContent = eventRow.name;
             cfg = vipFormConfig(store, eventRow.id, formType);
             document.title = `${cfg.title} · ${eventRow.name}`;
+
+            if (params.get('edit') === '1') {
+                const who = { first: params.get('f') || '', last: params.get('l') || '', email: params.get('e') || '' };
+                // Keep names/emails out of the address bar and browser history
+                if (params.has('f') || params.has('l') || params.has('e')) history.replaceState(null, '', editPageUrl(true));
+                if (!vipFormCanEdit(cfg)) {
+                    showState('no', 'Editing is closed', 'Changes to registrations are closed. Contact the CAB Special Events team if something needs to change.');
+                    return;
+                }
+                if (who.first && who.last && who.email) {
+                    const match = await findRegistration(who.first, who.last, who.email);
+                    if (match) return await initManage(match.id);
+                    return renderEditScreen(who, "We couldn't find that registration. If you changed your name, enter your current name and email.");
+                }
+                return renderEditScreen(who);
+            }
+
             if (vipFormState(cfg).open) renderSignup();
             else showClosedState();
         } catch (e) {
