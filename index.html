@@ -392,6 +392,13 @@
         .fc-checks { display: flex; flex-direction: column; gap: 12px; margin: 4px 0 18px; }
         .fc-checks .sub { display: flex; align-items: center; gap: 10px; margin-left: 24px; flex-wrap: wrap; }
         .fc-checks .sub input { width: auto; }
+        .lt-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 18px; }
+        .lt-stat { background: var(--inset-bg, rgba(12,12,16,0.45)); border: 1px solid var(--line); border-radius: 16px; padding: 14px 16px; }
+        .lt-stat .k { font-size: 12px; color: var(--text-muted); font-weight: 500; }
+        .lt-stat .v { font-size: 26px; font-weight: 700; margin-top: 4px; font-variant-numeric: tabular-nums; }
+        .lt-bar { height: 8px; border-radius: 9999px; background: rgba(255,255,255,0.08); overflow: hidden; margin-top: 14px; }
+        .lt-bar span { display: block; height: 100%; background: var(--accent-purple, #8b5cf6); border-radius: 9999px; transition: width 0.4s; }
+        .lt-queue { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 12px; font-size: 13px; color: var(--text-muted); }
         .setup-card-body { position: relative; }
         .danger-zone { padding: 24px; border: 1px solid var(--danger-border); border-radius: var(--radius-xl); background: rgba(248, 113, 113, 0.04); }
 
@@ -513,6 +520,9 @@
             .settings-tab { flex: 1; }
             .tab-full { display: none; }
             .fc-dates.on { grid-template-columns: 1fr; }
+            .lt-stats { gap: 8px; }
+            .lt-stat { padding: 12px; }
+            .lt-stat .v { font-size: 22px; }
             .tab-short { display: inline; }
             .modal-overlay { padding: 0; align-items: flex-end; }
             .modal-content { padding: 24px 18px calc(24px + env(safe-area-inset-bottom)); border-radius: 24px 24px 0 0; max-height: 92vh; }
@@ -847,6 +857,7 @@
                 <div class="settings-tabs">
                     <button id="stab-event" class="settings-tab active" onclick="switchSettingsTab('event')"><span class="tab-full">Event Setup</span><span class="tab-short">Event</span></button>
                     <button id="stab-forms" class="settings-tab" onclick="switchSettingsTab('forms')"><span class="tab-full">Sign-up Forms</span><span class="tab-short">Forms</span></button>
+                    <button id="stab-live" class="settings-tab" onclick="switchSettingsTab('live')"><span class="tab-full">Live Tickets</span><span class="tab-short">Live</span></button>
                     <button id="stab-emails" class="settings-tab" onclick="switchSettingsTab('emails')"><span class="tab-full">Email Templates</span><span class="tab-short">Emails</span></button>
                 </div>
             </div>
@@ -900,6 +911,12 @@
             <div id="settings-tab-forms" class="settings-section" style="display:none;">
                 <p class="page-sub" style="margin-top:-8px;">Public sign-up forms for the active event. Registrations show up in the guest list right away. To edit later, a main contact confirms the first name, last name and email they registered with.</p>
                 <div id="formsList"></div>
+            </div>
+
+            <!-- TAB: LIVE TICKETS -->
+            <div id="settings-tab-live" class="settings-section" style="display:none;">
+                <p class="page-sub" style="margin-top:-8px;">Free tickets students claim on a public page while supplies last. The ticket limit is enforced by the database, so it can never go over. Each claim gets its QR ticket by email and shows up in the guest list as "Live Tickets".</p>
+                <div id="liveTicketsPanel"></div>
             </div>
 
             <!-- TAB 2: EMAIL TEMPLATES -->
@@ -1305,7 +1322,8 @@
         currentData = {
             vips: guestsData.map(g => ({
                 id: g.id, first: g.first_name, last: g.last_name, team: g.team,
-                phone: g.phone, email: g.email, shirtSize: g.shirt_size, status: g.status, sent: g.email_sent
+                phone: g.phone, email: g.email, shirtSize: g.shirt_size, status: g.status, sent: g.email_sent,
+                studentId: g.student_id, liveClaimId: g.live_claim_id
             })),
             groups: groupsData,
             allEvents: eventsData,
@@ -1321,6 +1339,7 @@
             guestBody: activeEvent?.template_guest_body || DEFAULTS.guest.body
         };
         ensureEventLibrary(activeId);
+        if (liveSettingsEventId !== activeId) await loadLiveSettings(activeId);
         renderUI();
         // Load the editor when the event changes; realtime refreshes of the same event
         // leave any unsaved edits in the Settings editor alone.
@@ -1430,7 +1449,7 @@
                     : `<button onclick="event.stopPropagation(); checkIn('${v.id}')" class="btn-action btn-checkin ${isIn ? 'in' : ''}">${isIn ? '✓ Arrived' : 'Mark In'}</button>`;
 
                 return `
-                <tr class="guest-row ${isLabel ? 'label-row' : ''}" onclick="openPartyModal('${v.id}')" data-type="${escapeHtml(actualType)}" data-sent="${escapeHtml(v.sent)}" data-in="${isIn ? 1 : 0}" data-shirt="${escapeHtml((v.shirtSize || '').trim() === '-' ? '' : (v.shirtSize || '').trim())}" data-search="${escapeHtml(`${v.first} ${v.last} ${v.email || ''} ${v.phone || ''} ${actualType} ${v.team || ''}`.toUpperCase())}">
+                <tr class="guest-row ${isLabel ? 'label-row' : ''}" onclick="openPartyModal('${v.id}')" data-type="${escapeHtml(actualType)}" data-sent="${escapeHtml(v.sent)}" data-in="${isIn ? 1 : 0}" data-shirt="${escapeHtml((v.shirtSize || '').trim() === '-' ? '' : (v.shirtSize || '').trim())}" data-search="${escapeHtml(`${v.first} ${v.last} ${v.email || ''} ${v.phone || ''} ${v.studentId || ''} ${actualType} ${v.team || ''}`.toUpperCase())}">
                     <td class="c-name"><div class="name-cell"><span class="avatar" style="background:${avatarColor(v.first + v.last)}">${escapeHtml(((v.first || '?')[0] + (v.last || '')[0] || '').toUpperCase())}</span><div><div class="guest-name">${escapeHtml(v.first)} ${escapeHtml(v.last)}</div>${sub ? `<div class="group-sub">${sub}</div>` : ''}</div></div></td>
                     <td class="c-type"><span class="group-tag">${escapeHtml(actualType)}</span><span class="m-ticket">${ticket}</span></td>
                     <td class="c-ticket">${ticket}</td>
@@ -1443,6 +1462,7 @@
         filterTable();
         if (document.getElementById('partyModal').style.display === 'flex') renderGuestDetail();
         if (document.getElementById('settings-tab-forms')?.style.display === 'block') renderFormsTab();
+        if (document.getElementById('settings-tab-live')?.style.display === 'block') renderLiveTab();
         const unified = document.getElementById('unifiedCheckInInput');
         if (unified && document.getElementById('view-scan').style.display !== 'none') filterUnifiedCheckIn(unified.value);
     }
@@ -1507,6 +1527,7 @@
                 <div class="gd-list">
                     ${row('mail', 'Email', g.email, g.email ? `<a href="mailto:${escapeHtml(g.email)}">${escapeHtml(g.email)}</a>` : '')}
                     ${row('phone', 'Phone', g.phone, g.phone ? `<a href="tel:${escapeHtml(g.phone)}">${escapeHtml(g.phone)}</a>` : '')}
+                    ${g.studentId ? row('ticket', 'Student ID', g.studentId) : ''}
                     ${row('shirt', 'Shirt size', shirt)}
                     ${row('group', 'Group', g.team)}
                     ${isLabel ? '' : row('ticket', 'Ticket ID', '#' + String(g.id).substring(0, 8), `<span style="font-family:monospace;">#${escapeHtml(String(g.id).substring(0, 8))}</span>`)}
@@ -2264,6 +2285,264 @@
         saveFormsStore().then(ok => { if (ok) showToast('Form reset'); renderFormsTab(true); });
     }
 
+    // ============================================================
+    // LIVE TICKETS — free tickets claimed on claim.html while supplies last.
+    // Settings live in the `live_ticket_settings` table (one row per event).
+    // Claims go through the claim_live_tickets() database function, which
+    // enforces the ticket limit; see supabase-setup.sql section 4.
+    // ============================================================
+    const LIVE_DEFAULTS = {
+        status: 'closed', opens_at: null, closes_at: null,
+        total_tickets: 100, per_claim_limit: 1,
+        queue_enabled: false, queue_max_active: 50, queue_minutes: 10,
+        email_domain: '', title: '', intro: '', banner_url: '', closed_message: '',
+        email_subject: '', email_body: ''
+    };
+    const LIVE_PLACEHOLDERS = {
+        title: 'Claim your free ticket',
+        intro: "Tickets are free. Fill this out to claim yours — it's emailed to you right away.",
+        closed_message: 'Tickets are not available right now. Check back soon!',
+        email_subject: 'Your ticket for {{EVENT}}',
+        email_body: "Hi {{FIRST}},\n\nYou're all set for **{{EVENT}}**! Show the QR code below at check-in. Each code can be scanned once.\n\n– Canyon Activities Board"
+    };
+    let liveSettings = { ...LIVE_DEFAULTS };
+    let liveSettingsSaved = false;     // a row exists for this event
+    let liveSettingsEventId = null;
+    let liveSettingsError = false;     // table missing (SQL not run yet)
+    let liveQueueStats = null, liveQueueTimer = null;
+
+    async function loadLiveSettings(eventId) {
+        liveSettingsEventId = eventId;
+        liveQueueStats = null;
+        try {
+            const { data, error } = await _supabase.from('live_ticket_settings').select('*').eq('event_id', String(eventId)).maybeSingle();
+            if (error) throw error;
+            liveSettings = { ...LIVE_DEFAULTS, ...(data || {}) };
+            liveSettingsSaved = !!data;
+            liveSettingsError = false;
+        } catch (e) {
+            console.error('Failed to load live ticket settings:', e);
+            liveSettings = { ...LIVE_DEFAULTS };
+            liveSettingsSaved = false;
+            liveSettingsError = true;
+        }
+    }
+
+    async function saveLiveSettings(changes, message) {
+        const row = { ...liveSettings, ...changes, event_id: String(currentData.activeId), updated_at: new Date().toISOString() };
+        const { data, error } = await _supabase.from('live_ticket_settings').upsert(row, { onConflict: 'event_id' }).select().maybeSingle();
+        if (error) {
+            console.error('Error saving live ticket settings:', error);
+            showToast("⚠️ Couldn't save. Run the latest supabase-setup.sql first.");
+            return false;
+        }
+        liveSettings = { ...LIVE_DEFAULTS, ...(data || row) };
+        liveSettingsSaved = true;
+        liveSettingsError = false;
+        if (message) showToast(message);
+        renderLiveTab(true);
+        pollLiveQueueStats();
+        return true;
+    }
+
+    // Same open/closed rules the database uses (it has the final say)
+    function liveState(s = liveSettings, now = new Date()) {
+        if (s.status === 'open') return 'open';
+        if (s.status !== 'auto') return 'closed';
+        if (s.opens_at && now < new Date(s.opens_at)) return 'not_yet';
+        if (s.closes_at && now >= new Date(s.closes_at)) return 'ended';
+        return 'open';
+    }
+
+    function liveClaimedCount() { return currentData.vips.filter(v => v.liveClaimId).length; }
+
+    function liveStatusBadge(claimed) {
+        const st = liveState();
+        if (st === 'open' && claimed >= liveSettings.total_tickets) return `<span class="status-badge draft">Sold out</span>`;
+        if (st === 'open') return `<span class="status-badge sent">Live${liveSettings.status === 'auto' && liveSettings.closes_at ? ' · closes ' + fmtWhen(liveSettings.closes_at) : ''}</span>`;
+        if (st === 'not_yet') return `<span class="status-badge draft">Opens ${fmtWhen(liveSettings.opens_at)}</span>`;
+        if (st === 'ended') return `<span class="status-badge na">Ended ${fmtWhen(liveSettings.closes_at)}</span>`;
+        return `<span class="status-badge na">Closed</span>`;
+    }
+
+    function liveStatsHtml() {
+        const claimed = liveClaimedCount();
+        const total = liveSettings.total_tickets || 0;
+        const left = Math.max(0, total - claimed);
+        const pct = total ? Math.min(100, Math.round(claimed / total * 100)) : 0;
+        const claims = new Set(currentData.vips.filter(v => v.liveClaimId).map(v => v.liveClaimId)).size;
+        const q = liveSettings.queue_enabled
+            ? `<div class="lt-queue"><span>🕒 In line: <b style="color:#fff;">${liveQueueStats ? liveQueueStats.waiting : '–'}</b></span><span>· On the form now: <b style="color:#fff;">${liveQueueStats ? liveQueueStats.active : '–'}</b></span>
+                <button class="btn-ghost" style="padding:4px 10px; font-size:12px;" onclick="resetLiveQueue()">Clear the line</button></div>` : '';
+        return `<div class="lt-stats">
+                <div class="lt-stat"><div class="k">Claimed</div><div class="v">${claimed}<span style="font-size:15px; color:var(--text-muted); font-weight:500;"> / ${total}</span></div></div>
+                <div class="lt-stat"><div class="k">Tickets left</div><div class="v" style="color:${left ? 'var(--success-text)' : 'var(--warning-text)'};">${left}</div></div>
+                <div class="lt-stat"><div class="k">People who claimed</div><div class="v">${claims}</div></div>
+            </div>
+            <div class="lt-bar"><span style="width:${pct}%"></span></div>${q}`;
+    }
+
+    function renderLiveTab(force = false) {
+        const el = document.getElementById('liveTicketsPanel');
+        if (!el) return;
+        // Realtime refresh while typing: only update the live numbers
+        if (!force && el.contains(document.activeElement) && document.activeElement.matches('input, textarea, select')) {
+            const stats = document.getElementById('lt-stats');
+            if (stats) stats.innerHTML = liveStatsHtml();
+            return;
+        }
+        if (liveSettingsError) {
+            el.innerHTML = `<div class="setup-card"><h3 style="margin:0 0 8px;">Database setup needed</h3>
+                <p style="color:var(--text-muted); margin:0;">Live tickets need the tables and functions in <b>supabase-setup.sql</b> (section 4). Run that file in Supabase → SQL Editor, then reload this page.</p></div>`;
+            return;
+        }
+        const s = liveSettings;
+        const claimed = liveClaimedCount();
+        const openDetails = el.querySelector('details[open]') !== null;
+        const link = new URL('claim.html', location.href);
+        link.searchParams.set('event', currentData.activeId);
+        const linkStr = link.toString();
+        const seg = ['closed', 'open', 'auto'].map(st => `<button class="${s.status === st ? 'on' : ''}" onclick="setLiveStatus('${st}')">${{ closed: 'Closed', open: 'Open now', auto: 'Scheduled' }[st]}</button>`).join('');
+        const f = (k) => `id="lt-${k}"`;
+        const v = (k) => escapeHtml(s[k] || '');
+        el.innerHTML = `
+            <div class="setup-card">
+                <div class="fc-head">
+                    <div>
+                        <h3>Live ticket claim</h3>
+                        <div class="fc-meta">${liveStatusBadge(claimed)}<span>${s.total_tickets} free tickets</span><span>· up to ${s.per_claim_limit} per checkout</span>${s.queue_enabled ? '<span>· waiting room on</span>' : ''}</div>
+                    </div>
+                    <div class="seg">${seg}</div>
+                </div>
+                <div class="fc-dates ${s.status === 'auto' ? 'on' : ''}">
+                    <div><label class="stat-label">Opens</label><input type="datetime-local" class="modern-input" ${f('opens_at')} value="${isoToLocalInput(s.opens_at)}" onchange="saveLiveDates()"></div>
+                    <div><label class="stat-label">Closes <span style="text-transform:none; letter-spacing:0;">(optional)</span></label><input type="datetime-local" class="modern-input" ${f('closes_at')} value="${isoToLocalInput(s.closes_at)}" onchange="saveLiveDates()"></div>
+                </div>
+                <div id="lt-stats">${liveStatsHtml()}</div>
+                <div class="fc-link-box">
+                    <input class="modern-input" value="${escapeHtml(linkStr)}" readonly onclick="this.select()">
+                    <button class="btn-action secondary" style="flex-shrink:0;" onclick="copyText('${escapeHtml(linkStr)}', 'Ticket link copied')">Copy link</button>
+                    <a class="btn-action secondary" style="flex-shrink:0; text-decoration:none;" href="${escapeHtml(linkStr)}" target="_blank" rel="noopener">Preview</a>
+                </div>
+            </div>
+
+            <div class="setup-card">
+                <h3 style="margin:0 0 16px; font-size:17px; font-weight:600;">Tickets</h3>
+                <div class="form-grid" style="margin-bottom:16px;">
+                    <div><label class="stat-label">Total tickets available</label><input type="number" min="0" max="100000" class="modern-input" ${f('total_tickets')} value="${s.total_tickets}"></div>
+                    <div><label class="stat-label">Max tickets per checkout</label><input type="number" min="1" max="20" class="modern-input" ${f('per_claim_limit')} value="${s.per_claim_limit}"></div>
+                </div>
+                <label class="stat-label">Only accept emails ending in <span style="text-transform:none; letter-spacing:0;">(blank = any email)</span></label>
+                <input class="modern-input" ${f('email_domain')} value="${v('email_domain')}" placeholder="e.g. my.gcu.edu" style="margin-bottom:8px;">
+                <p style="font-size:0.8rem; color:var(--text-muted); margin:0 0 18px;">The form asks for first and last name, student email, phone number and student ID. Each student email and student ID can claim once.</p>
+
+                <h3 style="margin:8px 0 12px; font-size:15px; font-weight:600;">Waiting room</h3>
+                <div class="fc-checks">
+                    <label class="check-row"><input type="checkbox" ${f('queue_enabled')} ${s.queue_enabled ? 'checked' : ''}> Put visitors in a line when it gets busy</label>
+                    <div class="sub"><span class="stat-label" style="margin:0;">Let</span><input type="number" min="1" max="5000" class="modern-input" style="max-width:110px;" ${f('queue_max_active')} value="${s.queue_max_active}"><span class="stat-label" style="margin:0;">people fill out the form at a time, with</span><input type="number" min="2" max="60" class="modern-input" style="max-width:90px;" ${f('queue_minutes')} value="${s.queue_minutes}"><span class="stat-label" style="margin:0;">minutes to finish</span></div>
+                </div>
+                <div style="display:flex; justify-content:flex-end;"><button class="btn-action" onclick="saveLiveTickets()">Save ticket settings</button></div>
+
+                <details class="fc-more" ${openDetails ? 'open' : ''}>
+                    <summary>Customize page &amp; email</summary>
+                    <label class="stat-label">Banner image <span style="text-transform:none; letter-spacing:0;">(blank = the event's email banner)</span></label>
+                    <div style="display:flex; gap:8px; margin:0 0 18px; flex-wrap:wrap;">
+                        <input type="file" accept="image/*" id="lt-bannerFile" style="display:none;" onchange="uploadLiveBanner(this.files[0]); this.value='';">
+                        <button class="btn-action secondary" onclick="document.getElementById('lt-bannerFile').click()">${s.banner_url ? 'Replace photo' : 'Upload photo'}</button>
+                        <input class="modern-input" style="flex:1; min-width:200px;" ${f('banner_url')} value="${v('banner_url')}" placeholder="…or paste an image URL">
+                    </div>
+                    <label class="stat-label">Page title</label>
+                    <input class="modern-input" ${f('title')} value="${v('title')}" placeholder="${escapeHtml(LIVE_PLACEHOLDERS.title)}" style="margin-bottom:16px;">
+                    <label class="stat-label">Intro text</label>
+                    <textarea class="modern-input" rows="3" ${f('intro')} placeholder="${escapeHtml(LIVE_PLACEHOLDERS.intro)}" style="margin-bottom:16px; resize:vertical;">${v('intro')}</textarea>
+                    <label class="stat-label">Message when claiming is closed</label>
+                    <textarea class="modern-input" rows="2" ${f('closed_message')} placeholder="${escapeHtml(LIVE_PLACEHOLDERS.closed_message)}" style="margin-bottom:16px; resize:vertical;">${v('closed_message')}</textarea>
+                    <label class="stat-label">Ticket email subject</label>
+                    <input class="modern-input" ${f('email_subject')} value="${v('email_subject')}" placeholder="${escapeHtml(LIVE_PLACEHOLDERS.email_subject)}" style="margin-bottom:16px;">
+                    <label class="stat-label">Ticket email message <span style="text-transform:none; letter-spacing:0;">— {{FIRST}} {{LAST}} {{EVENT}} {{COUNT}} · **bold**</span></label>
+                    <textarea class="modern-input" rows="6" ${f('email_body')} placeholder="${escapeHtml(LIVE_PLACEHOLDERS.email_body)}" style="margin-bottom:8px; resize:vertical;">${v('email_body')}</textarea>
+                    <p style="font-size:0.8rem; color:var(--text-muted); margin:0 0 16px;">The QR code for each ticket is added below the message. The email uses this event's banner and ticket heading. Leave any box blank to use the grey example text.</p>
+                    <div style="display:flex; justify-content:flex-end;"><button class="btn-action" onclick="saveLiveTickets()">Save page &amp; email</button></div>
+                </details>
+            </div>`;
+    }
+
+    function setLiveStatus(status) {
+        const claimed = liveClaimedCount();
+        if (status === 'open' && claimed >= liveSettings.total_tickets && !confirm(`All ${liveSettings.total_tickets} tickets are already claimed, so the page will show "sold out". Open it anyway?`)) return;
+        if (status === 'auto' && !liveSettings.opens_at) setTimeout(() => showToast('Pick an open time below — with no open time it counts as open'), 1500);
+        saveLiveSettings({ status }, { closed: 'Ticket claiming closed', open: '🎟️ Ticket claiming is LIVE', auto: 'Ticket claiming scheduled' }[status]);
+    }
+
+    function saveLiveDates() {
+        const get = k => document.getElementById('lt-' + k).value;
+        const opens_at = localInputToIso(get('opens_at')) || null, closes_at = localInputToIso(get('closes_at')) || null;
+        if (opens_at && closes_at && new Date(closes_at) <= new Date(opens_at)) { showToast("Close time must be after open time"); return; }
+        saveLiveSettings({ opens_at, closes_at }, 'Schedule saved');
+    }
+
+    function saveLiveTickets() {
+        const el = k => document.getElementById('lt-' + k);
+        const num = (k, min, max, fallback) => { const n = parseInt(el(k).value, 10); return Math.max(min, Math.min(max, isNaN(n) ? fallback : n)); };
+        const total = num('total_tickets', 0, 100000, liveSettings.total_tickets);
+        const claimed = liveClaimedCount();
+        if (total < claimed && !confirm(`${claimed} tickets are already claimed. Setting the total to ${total} won't cancel any of them — the page will just show "sold out". Continue?`)) return;
+        const changes = {
+            total_tickets: total,
+            per_claim_limit: num('per_claim_limit', 1, 20, 1),
+            email_domain: el('email_domain').value.trim().replace(/^@/, '').toLowerCase(),
+            queue_enabled: el('queue_enabled').checked,
+            queue_max_active: num('queue_max_active', 1, 5000, 50),
+            queue_minutes: num('queue_minutes', 2, 60, 10)
+        };
+        // The customize fields only exist in the page when rendered
+        ['banner_url', 'title', 'intro', 'closed_message', 'email_subject', 'email_body'].forEach(k => { if (el(k)) changes[k] = el(k).value.trim(); });
+        saveLiveSettings(changes, 'Live ticket settings saved');
+    }
+
+    async function uploadLiveBanner(file) {
+        if (!file) return;
+        if (!file.type.startsWith('image/')) { showToast('Please choose an image file'); return; }
+        document.getElementById('loader').style.display = 'flex';
+        document.querySelector('#loader span').innerText = 'UPLOADING...';
+        const ext = (file.name.split('.').pop() || 'png').replace(/[^a-zA-Z0-9]/g, '');
+        const path = `form-banners/${currentData.activeId}_live_${Date.now()}.${ext}`;
+        const { error } = await _supabase.storage.from('banners').upload(path, file, { upsert: true, contentType: file.type });
+        document.getElementById('loader').style.display = 'none';
+        document.querySelector('#loader span').innerText = 'SYNCING';
+        if (error) {
+            console.error('Live banner upload failed:', error);
+            alert("Couldn't upload the banner. Make sure the public 'banners' storage bucket exists (run supabase-setup.sql), or paste an image URL instead.");
+            return;
+        }
+        saveLiveSettings({ banner_url: _supabase.storage.from('banners').getPublicUrl(path).data.publicUrl }, 'Banner updated');
+    }
+
+    // Waiting-room numbers refresh every 5s while the Live Tickets tab is open
+    async function pollLiveQueueStats() {
+        clearTimeout(liveQueueTimer);
+        const visible = document.getElementById('settings-tab-live')?.style.display === 'block'
+            && document.getElementById('view-settings')?.style.display !== 'none';
+        if (!visible || !liveSettings.queue_enabled || liveSettingsError) return;
+        try {
+            const { data, error } = await _supabase.rpc('live_ticket_queue_stats', { p_event_id: String(currentData.activeId) });
+            if (!error && data) {
+                liveQueueStats = data;
+                const stats = document.getElementById('lt-stats');
+                if (stats) stats.innerHTML = liveStatsHtml();
+            }
+        } catch (e) { console.error(e); }
+        liveQueueTimer = setTimeout(pollLiveQueueStats, 5000);
+    }
+
+    async function resetLiveQueue() {
+        if (!confirm('Clear the waiting room? Everyone in line or on the form loses their spot and rejoins at the back the next time their page checks in. Claimed tickets are not affected.')) return;
+        const { error } = await _supabase.rpc('live_ticket_queue_reset', { p_event_id: String(currentData.activeId) });
+        if (error) { console.error(error); showToast("⚠️ Couldn't clear the line"); return; }
+        showToast('Line cleared');
+        pollLiveQueueStats();
+    }
+
     // --- CUSTOM EMAIL MODAL ---
     let _customEmailAttachments = []; // [{ name, size, content }] picked here, or [{ name, size, url, fromTemplate }]
 
@@ -2770,6 +3049,7 @@
         document.getElementById('stab-' + tabId).classList.add('active');
         if (tabId === 'emails') updatePreview();
         if (tabId === 'forms') renderFormsTab(true);
+        if (tabId === 'live') { renderLiveTab(true); pollLiveQueueStats(); }
     }
 
     function showToast(m) { const t = document.getElementById('toast'); if(t) { t.innerText = m; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 3000); } }
@@ -2807,12 +3087,12 @@
             (b.isHost - a.isHost) ||
             nameOf(a.v).localeCompare(nameOf(b.v)));
 
-        const header = ['VIP Type', 'Party (Main Contact)', 'Role', 'First Name', 'Last Name', 'Email', 'Phone', 'Shirt Size', 'Group / Department', 'Ticket', 'Checked In', 'Ticket ID'];
+        const header = ['VIP Type', 'Party (Main Contact)', 'Role', 'First Name', 'Last Name', 'Email', 'Phone', 'Student ID', 'Shirt Size', 'Group / Department', 'Ticket', 'Checked In', 'Ticket ID'];
         const lines = [header];
         rows.forEach(({ type, party, isHost, v }) => {
             lines.push([
                 type, party, isHost ? 'Main contact' : 'Guest',
-                v.first || '', v.last || '', v.email || '', v.phone || '', sizeOf(v),
+                v.first || '', v.last || '', v.email || '', v.phone || '', v.studentId || '', sizeOf(v),
                 v.team || '',
                 v.sent === 'N/A' ? 'Label only' : (v.sent === 'Yes' ? 'Sent' : 'Unsent'),
                 v.sent === 'N/A' ? '' : (v.status === 'Checked In' ? 'Yes' : 'No'),
@@ -3003,6 +3283,7 @@
             const deletedId = currentData.activeId;
             await _supabase.from('events').delete().eq('id', deletedId);
             if (emailTemplateStore[deletedId]) { delete emailTemplateStore[deletedId]; saveEmailTemplateLibrary(); }
+            _supabase.from('live_ticket_settings').delete().eq('event_id', String(deletedId)).then(() => {}, () => {});
             localStorage.removeItem('activeEventId');
             showToast("Event Deleted!");
             refreshData(null); // Passing null loads the first available event

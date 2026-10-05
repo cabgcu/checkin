@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#131316" />
+    <title>CAB Tickets</title>
+    <link rel="icon" type="image/png" href="https://i.imgur.com/wR5HGeC.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        :root {
+            --app-bg: #131316; --card-bg: rgba(28, 28, 34, 0.68); --solid-bg: #1c1c22; --inset-bg: rgba(12, 12, 16, 0.45); --highlight-bg: rgba(255, 255, 255, 0.1);
+            --accent-blue: #2563eb; --accent-blue-hover: #1d4ed8; --accent-purple: #8b5cf6;
+            --text-main: #fff; --text-muted: #9ca3af; --text-dim: #71717a;
+            --line: rgba(39, 39, 42, 0.8); --line-strong: #3f3f46;
+            --success-text: #4ade80; --success-bg: rgba(74, 222, 128, 0.1);
+            --warning-text: #fbbf24; --warning-bg: rgba(251, 191, 36, 0.1);
+            --danger-text: #f87171; --danger-bg: rgba(248, 113, 113, 0.1);
+            --font: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+        html { background: var(--app-bg); color-scheme: dark; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { margin: 0; font-family: var(--font); font-size: 15px; color: var(--text-main); background: transparent; -webkit-font-smoothing: antialiased; }
+        #bg-container {
+            position: fixed; inset: 0; z-index: -1; pointer-events: none;
+            background: #131316 url('https://i.imgur.com/APGH0Wv.png') center / cover no-repeat;
+        }
+        #bg-container::after { content: ''; position: absolute; inset: 0; background: rgba(19, 19, 22, 0.25); }
+        .wrap { max-width: 640px; margin: 0 auto; padding: 32px 16px 64px; padding-top: calc(32px + env(safe-area-inset-top)); }
+        .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+        .brand img { height: 34px; }
+        .brand .t { font-weight: 700; font-size: 15px; }
+        .brand .s { color: var(--text-muted); font-size: 13px; }
+
+        .card { background: var(--card-bg); border: 1px solid var(--line); border-radius: 24px; overflow: hidden; }
+        .card-body { padding: 28px; }
+        .banner { display: block; width: 100%; height: auto; }
+        h1 { margin: 0 0 10px; font-size: 26px; font-weight: 700; line-height: 1.2; }
+        .intro { color: var(--text-muted); line-height: 1.6; margin: 0 0 8px; white-space: pre-line; }
+        .muted { color: var(--text-muted); }
+
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 22px; }
+        .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+        .field.full { grid-column: 1 / -1; }
+        label { color: var(--text-muted); font-size: 13px; font-weight: 500; }
+        label .req { color: var(--accent-purple); }
+        input, select {
+            width: 100%; background: var(--inset-bg); border: 1px solid var(--line); color: #fff;
+            height: 46px; padding: 0 14px; border-radius: 12px; font: 16px var(--font); outline: none; transition: border-color 0.15s;
+        }
+        input:focus, select:focus { border-color: #52525b; }
+        input::placeholder { color: var(--text-dim); }
+        select { appearance: none; -webkit-appearance: none; padding-right: 36px; cursor: pointer;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-repeat: no-repeat; background-position: right 12px center; background-size: 15px; }
+        select option { background: var(--solid-bg); }
+
+        .btn { background: var(--accent-blue); color: #fff; border: none; border-radius: 9999px; padding: 13px 22px; font: 600 15px var(--font); cursor: pointer; transition: background 0.15s, transform 0.1s; display: inline-flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; }
+        .btn:hover { background: var(--accent-blue-hover); }
+        .btn:active { transform: scale(0.98); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn.block { width: 100%; }
+        .btn.secondary { background: transparent; border: 1px solid var(--line-strong); color: #e4e4e7; }
+        .btn.secondary:hover { background: var(--highlight-bg); }
+        .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 24px; }
+
+        /* Tickets-left bar */
+        .stock { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; padding: 12px 16px; background: var(--inset-bg); border: 1px solid var(--line); border-radius: 14px; font-size: 14px; }
+        .stock b { font-size: 18px; }
+        .stock.low b { color: var(--warning-text); }
+        .hold { display: none; margin-top: 12px; padding: 10px 16px; border-radius: 14px; background: rgba(139, 92, 246, 0.1); color: #c4b5fd; font-size: 13px; line-height: 1.5; }
+        .hold.on { display: block; }
+        .hold.urgent { background: var(--warning-bg); color: var(--warning-text); }
+
+        .state { text-align: center; padding: 44px 28px; }
+        .state .icon { width: 64px; height: 64px; border-radius: 50%; margin: 0 auto 18px; display: flex; align-items: center; justify-content: center; font-size: 28px; }
+        .state .icon.ok { background: var(--success-bg); }
+        .state .icon.wait { background: var(--warning-bg); }
+        .state .icon.no { background: var(--danger-bg); }
+        .state p { color: var(--text-muted); line-height: 1.6; margin: 0 auto; max-width: 440px; white-space: pre-line; }
+        .countdown { font-size: 34px; font-weight: 700; letter-spacing: 0.02em; margin: 18px 0 4px; font-variant-numeric: tabular-nums; }
+
+        /* Waiting room */
+        .line-pos { font-size: 56px; font-weight: 700; line-height: 1; margin: 6px 0 6px; font-variant-numeric: tabular-nums; }
+        .line-dots { display: flex; justify-content: center; gap: 6px; margin: 22px 0 0; }
+        .line-dots span { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-purple); opacity: 0.25; animation: pulse 1.4s infinite ease-in-out; }
+        .line-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .line-dots span:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes pulse { 0%, 100% { opacity: 0.25; } 50% { opacity: 1; } }
+
+        /* Claimed tickets */
+        .tickets { display: grid; gap: 14px; margin: 24px 0 0; }
+        .ticket { background: #fff; color: #18181b; border-radius: 18px; padding: 18px; text-align: center; }
+        .ticket img { width: 190px; height: 190px; display: block; margin: 0 auto; }
+        .ticket .n { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #52525b; margin-bottom: 10px; }
+        .ticket .id { font: 12px monospace; color: #71717a; margin-top: 8px; }
+
+        .error { color: var(--danger-text); font-size: 14px; margin-top: 14px; min-height: 1px; }
+        .spinner { width: 28px; height: 28px; margin: 60px auto; border: 3px solid rgba(255,255,255,0.12); border-top-color: var(--accent-purple); border-radius: 50%; animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @media (max-width: 560px) {
+            .card-body { padding: 22px 18px; }
+            .grid { grid-template-columns: 1fr; }
+            h1 { font-size: 22px; }
+        }
+    </style>
+</head>
+<body>
+<div id="bg-container"></div>
+<div class="wrap">
+    <div class="brand">
+        <img src="https://i.imgur.com/p2qZOL5.png" alt="CAB">
+        <div><div class="t">Canyon Activities Board</div><div class="s" id="eventName">Free Tickets</div></div>
+    </div>
+    <div class="card" id="app"><div class="spinner"></div></div>
+</div>
+
+<script>
+    const SUPABASE_URL = 'https://raraxpjsftqxhwkpwpab.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_p4FqN3nJTT5GFNU_xqZtYg_7fPtkKhS';
+    const SENDER_EMAIL = 'noreply@cabgcu.com';
+    const SENDER_NAME = 'Canyon Activities Board';
+    const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    const DEFAULT_TITLE = 'Claim your free ticket';
+    const DEFAULT_CLOSED = 'Tickets are not available right now. Check back soon!';
+    const DEFAULT_EMAIL_SUBJECT = 'Your ticket for {{EVENT}}';
+    const DEFAULT_EMAIL_BODY = "Hi {{FIRST}},\n\nYou're all set for **{{EVENT}}**! Show the QR code below at check-in. Each code can be scanned once.\n\n– Canyon Activities Board";
+
+    const params = new URLSearchParams(location.search);
+    const eventId = params.get('event');
+    const app = document.getElementById('app');
+    const TOKEN_KEY = 'cabLiveTicketToken:' + eventId;
+
+    let eventRow = null;
+    let info = null;            // latest live_ticket_status response
+    let view = null;            // which screen is showing: 'form' | 'waiting' | 'closed' | 'sold_out' | 'done' | ...
+    let pollTimer = null, tickTimer = null;
+    let clockOffset = 0;        // server time minus this device's time
+    let submitting = false;
+
+    // ── helpers ────────────────────────────────────────────────
+    function escapeHtml(str) {
+        if (str === null || str === undefined) return '';
+        return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+    }
+    const isEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+    function processImageUrl(url) {
+        if (!url) return "";
+        if (url.includes('drive.google.com')) {
+            const m = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+            if (m && m[1]) return `https://lh3.googleusercontent.com/d/${m[1]}`;
+        }
+        return url;
+    }
+    function ticketQrUrl(data) {
+        return "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=" + encodeURIComponent(data) + "&format=png&bgcolor=FFFFFF&color=000000&margin=10";
+    }
+    const serverNow = () => Date.now() + clockOffset;
+    function getToken() { try { return localStorage.getItem(TOKEN_KEY) || null; } catch { return null; } }
+    function setToken(t) { try { t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY); } catch {} }
+    const emailDomain = () => (info?.email_domain || '').trim().replace(/^@/, '').toLowerCase();
+    const perClaim = () => Math.max(1, info?.per_claim_limit || 1);
+    const maxPick = () => Math.max(1, Math.min(perClaim(), info?.remaining || 1));
+
+    function bannerSrc() { return processImageUrl(info?.banner_url || eventRow?.banner_url || ''); }
+    function bannerHtml() {
+        const src = bannerSrc();
+        return src ? `<img class="banner" src="${escapeHtml(src)}" alt="">` : '';
+    }
+    function showState(kind, title, message, extra = '') {
+        const icon = { ok: '✓', wait: '⏳', no: '✕' }[kind] || 'ℹ';
+        clearInterval(tickTimer);
+        app.innerHTML = `${bannerHtml()}<div class="state"><div class="icon ${kind}">${icon}</div><h1>${escapeHtml(title)}</h1><p>${escapeHtml(message)}</p>${extra}</div>`;
+    }
+    function fmtDuration(ms) {
+        const s = Math.max(0, Math.floor(ms / 1000));
+        const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60), sec = s % 60;
+        const pad = n => String(n).padStart(2, '0');
+        if (d) return `${d}d ${h}h ${pad(m)}m`;
+        if (h) return `${h}:${pad(m)}:${pad(sec)}`;
+        return `${m}:${pad(sec)}`;
+    }
+    function schedule(fn, ms) {
+        clearTimeout(pollTimer);
+        // A little jitter so a crowd doesn't hit the server in lockstep
+        pollTimer = setTimeout(fn, ms + Math.random() * Math.min(2000, ms * 0.3));
+    }
+
+    // ── status polling ─────────────────────────────────────────
+    async function fetchStatus() {
+        const { data, error } = await _supabase.rpc('live_ticket_status', { p_event_id: eventId, p_token: getToken() });
+        if (error) throw error;
+        if (data?.server_now) clockOffset = new Date(data.server_now).getTime() - Date.now();
+        if (data?.token) setToken(data.token);
+        return data;
+    }
+
+    async function poll() {
+        if (view === 'done') return;
+        try {
+            info = await fetchStatus();
+        } catch (e) {
+            console.error(e);
+            // Busy or offline: keep the current screen and try again shortly
+            if (!view) showState('no', 'Something went wrong', 'Please refresh the page and try again.');
+            schedule(poll, 6000);
+            return;
+        }
+        render();
+    }
+
+    function render() {
+        if (submitting || view === 'done') return;
+        const st = info?.state;
+        if (eventRow && info) document.title = `${info.title || DEFAULT_TITLE} · ${eventRow.name}`;
+
+        if (st === 'missing') {
+            view = 'missing';
+            showState('no', 'Tickets not available', 'Tickets for this event are not set up yet. Please use the link CAB shared with you.');
+            return schedule(poll, 30000);
+        }
+        if (st === 'not_yet') return renderNotYet();
+        if (st === 'closed' || st === 'ended') {
+            view = 'closed';
+            showState('no', st === 'ended' ? 'Ticket claiming has ended' : 'Tickets are closed', info.closed_message || DEFAULT_CLOSED);
+            return schedule(poll, 30000);
+        }
+        if (st === 'sold_out') {
+            view = 'sold_out';
+            showState('no', 'All tickets have been claimed', "Sorry, every ticket is gone. If more open up, they'll show here.");
+            return schedule(poll, 20000);
+        }
+        if (st === 'waiting') return renderWaiting();
+        if (st === 'open') {
+            if (view === 'form') updateForm(); else renderForm();
+            // Queue holders check in more often so their spot stays reserved
+            return schedule(poll, info.queue ? 15000 : 20000);
+        }
+        view = null;
+        showState('no', 'Something went wrong', 'Please refresh the page and try again.');
+    }
+
+    // ── not open yet: live countdown ───────────────────────────
+    function renderNotYet() {
+        const opens = new Date(info.opens_at).getTime();
+        if (view !== 'not_yet') {
+            view = 'not_yet';
+            const when = new Date(info.opens_at).toLocaleString(undefined, { weekday: 'long', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+            showState('wait', info.title || DEFAULT_TITLE, `Tickets open ${when}.\nKeep this page open — it will open the form automatically.`,
+                `<div class="countdown" id="countdown"></div><div class="muted" style="font-size:13px;">${info.total} free tickets</div>`);
+        }
+        const tick = () => {
+            const el = document.getElementById('countdown');
+            if (el) el.textContent = fmtDuration(opens - serverNow());
+        };
+        tick();
+        clearInterval(tickTimer); tickTimer = setInterval(tick, 1000);
+        const left = opens - serverNow();
+        // Check right as it opens; poll lightly until then
+        schedule(poll, left < 0 ? 2000 : Math.min(left + 500, left < 120000 ? 5000 : 30000));
+    }
+
+    // ── waiting room ───────────────────────────────────────────
+    function renderWaiting() {
+        clearInterval(tickTimer);
+        const ahead = Math.max(0, (info.position || 1) - 1);
+        const msg = ahead === 0 ? "You're next! The form will open on its own."
+            : `${ahead.toLocaleString()} ${ahead === 1 ? 'person is' : 'people are'} ahead of you.`;
+        const note = info.was_expired ? '<p style="margin-top:12px; color:var(--warning-text);">Your time on the form ran out, so you were added back to the line.</p>' : '';
+        if (view !== 'waiting') {
+            view = 'waiting';
+            app.innerHTML = `${bannerHtml()}<div class="state">
+                <div class="icon wait">⏳</div>
+                <h1>You're in line</h1>
+                <p>Lots of people are claiming tickets right now. Keep this page open — the form opens automatically when it's your turn, and you'll keep your place if you refresh.</p>
+                <div class="muted" style="margin-top:24px; font-size:13px; text-transform:uppercase; letter-spacing:0.06em;">Your place in line</div>
+                <div class="line-pos" id="linePos"></div>
+                <p id="lineMsg"></p>
+                <div id="lineNote"></div>
+                <div class="stock" style="max-width:320px; margin:20px auto 0;"><span class="muted">Tickets left</span><b id="lineLeft"></b></div>
+                <div class="line-dots"><span></span><span></span><span></span></div>
+            </div>`;
+        }
+        document.getElementById('linePos').textContent = (info.position || 1).toLocaleString();
+        document.getElementById('lineMsg').textContent = msg;
+        document.getElementById('lineNote').innerHTML = note;
+        document.getElementById('lineLeft').textContent = (info.remaining || 0).toLocaleString();
+        schedule(poll, 5000);
+    }
+
+    // ── the claim form ─────────────────────────────────────────
+    function qtyOptions(selected) {
+        const max = maxPick();
+        const sel = Math.min(selected || 1, max);
+        return Array.from({ length: max }, (_, i) => i + 1).map(n => `<option value="${n}" ${n === sel ? 'selected' : ''}>${n} ticket${n === 1 ? '' : 's'}</option>`).join('');
+    }
+
+    function renderForm() {
+        view = 'form';
+        const domain = emailDomain();
+        const multi = perClaim() > 1;
+        app.innerHTML = `${bannerHtml()}<div class="card-body">
+            <h1>${escapeHtml(info.title || DEFAULT_TITLE)}</h1>
+            ${info.intro ? `<p class="intro">${escapeHtml(info.intro)}</p>` : `<p class="intro">Tickets are free. Fill this out to claim yours — it's emailed to you right away.</p>`}
+            <div class="stock" id="stock"><span class="muted">Tickets left</span><b id="stockLeft"></b></div>
+            <div class="hold" id="hold"></div>
+            <form id="claimForm" novalidate>
+                <div class="grid">
+                    <div class="field"><label>First name <span class="req">*</span></label><input id="cFirst" autocomplete="given-name" maxlength="80" required></div>
+                    <div class="field"><label>Last name <span class="req">*</span></label><input id="cLast" autocomplete="family-name" maxlength="80" required></div>
+                    <div class="field full"><label>Student email <span class="req">*</span> <span class="muted">(your ticket is sent here)</span></label><input type="email" id="cEmail" autocomplete="email" maxlength="200" placeholder="${domain ? 'you@' + escapeHtml(domain) : ''}" required></div>
+                    <div class="field"><label>Phone number <span class="req">*</span></label><input type="tel" id="cPhone" autocomplete="tel" maxlength="40" required></div>
+                    <div class="field"><label>Student ID number <span class="req">*</span></label><input id="cStudentId" inputmode="numeric" autocomplete="off" maxlength="40" required></div>
+                    ${multi ? `<div class="field full"><label>How many tickets? <span class="muted">(up to ${perClaim()})</span></label><select id="cQty"></select></div>` : ''}
+                </div>
+                <div class="error" id="formError"></div>
+                <div class="actions"><button type="submit" class="btn block" id="submitBtn">Claim ticket</button></div>
+            </form>
+        </div>`;
+        document.getElementById('claimForm').addEventListener('submit', submitClaim);
+        updateForm();
+    }
+
+    // Refresh the live numbers without touching anything the person typed
+    function updateForm() {
+        const left = info.remaining || 0;
+        const stock = document.getElementById('stock');
+        if (stock) {
+            document.getElementById('stockLeft').textContent = `${left.toLocaleString()} of ${(info.total || 0).toLocaleString()}`;
+            stock.classList.toggle('low', left <= Math.max(5, (info.total || 0) * 0.1));
+        }
+        const qty = document.getElementById('cQty');
+        if (qty) qty.innerHTML = qtyOptions(parseInt(qty.value, 10) || 1);
+        updateSubmitLabel();
+
+        clearInterval(tickTimer);
+        const hold = document.getElementById('hold');
+        if (!hold) return;
+        if (info.queue && info.expires_at) {
+            const exp = new Date(info.expires_at).getTime();
+            const tick = () => {
+                const ms = exp - serverNow();
+                hold.classList.add('on');
+                hold.classList.toggle('urgent', ms < 60000);
+                hold.textContent = ms > 0 ? `Your spot is held for ${fmtDuration(ms)}. Finish before the timer runs out.` : 'Your time is up — checking your spot…';
+                if (ms <= 0) { clearInterval(tickTimer); if (!submitting) schedule(poll, 500); }
+            };
+            tick();
+            tickTimer = setInterval(tick, 1000);
+        } else {
+            hold.classList.remove('on');
+        }
+    }
+
+    function updateSubmitLabel() {
+        const btn = document.getElementById('submitBtn');
+        if (!btn || submitting) return;
+        const n = parseInt(document.getElementById('cQty')?.value, 10) || 1;
+        btn.textContent = n > 1 ? `Claim ${n} tickets` : 'Claim ticket';
+    }
+    document.addEventListener('change', (e) => { if (e.target.id === 'cQty') updateSubmitLabel(); });
+
+    const ERRORS = {
+        name: 'Please enter your first and last name.',
+        email: 'Please enter a valid student email.',
+        phone: 'Please enter a valid phone number.',
+        student_id: 'Please enter your student ID number.',
+        duplicate: 'Tickets have already been claimed with this student email or student ID. Check your inbox (and spam folder) for your ticket.'
+    };
+
+    async function submitClaim(e) {
+        e.preventDefault();
+        if (submitting) return;
+        const err = document.getElementById('formError');
+        const btn = document.getElementById('submitBtn');
+        const v = (id) => document.getElementById(id)?.value.trim() || '';
+        const form = { first: v('cFirst'), last: v('cLast'), email: v('cEmail'), phone: v('cPhone'), studentId: v('cStudentId'), qty: parseInt(v('cQty'), 10) || 1 };
+        err.textContent = '';
+
+        if (!form.first || !form.last) return err.textContent = ERRORS.name;
+        if (!isEmail(form.email)) return err.textContent = ERRORS.email;
+        const domain = emailDomain();
+        if (domain && !form.email.toLowerCase().endsWith('@' + domain)) return err.textContent = `Please use your student email (ending in @${domain}).`;
+        if (form.phone.replace(/\D/g, '').length < 7) return err.textContent = ERRORS.phone;
+        if (!form.studentId) return err.textContent = ERRORS.student_id;
+
+        submitting = true;
+        btn.disabled = true; btn.textContent = 'Claiming…';
+        let res;
+        try {
+            const { data, error } = await _supabase.rpc('claim_live_tickets', {
+                p_event_id: eventId, p_first: form.first, p_last: form.last, p_email: form.email,
+                p_phone: form.phone, p_student_id: form.studentId, p_quantity: form.qty, p_token: getToken()
+            });
+            if (error) throw error;
+            res = data;
+        } catch (ex) {
+            console.error(ex);
+            submitting = false;
+            btn.disabled = false; updateSubmitLabel();
+            err.textContent = "We couldn't reach the ticket server. Please try again — you can't end up with duplicate tickets.";
+            return;
+        }
+
+        if (res?.ok) {
+            setToken(null);
+            view = 'done';
+            clearTimeout(pollTimer); clearInterval(tickTimer);
+            btn.textContent = 'Sending your ticket…';
+            await finishClaim(form, res.tickets || []);
+            submitting = false;
+            return;
+        }
+
+        submitting = false;
+        btn.disabled = false; updateSubmitLabel();
+        const code = res?.error;
+        if (code === 'sold_out' || code === 'closed' || code === 'queue') {
+            // The page moves to the sold-out / closed / waiting screen
+            if (code === 'queue') setToken(null);
+            view = null;
+            return poll();
+        }
+        if (code === 'not_enough') {
+            info.remaining = res.remaining;
+            updateForm();
+            return err.textContent = `Only ${res.remaining} ticket${res.remaining === 1 ? ' is' : 's are'} left. Choose fewer and try again.`;
+        }
+        if (code === 'quantity') return err.textContent = `You can claim up to ${res.limit} ticket${res.limit === 1 ? '' : 's'}.`;
+        if (code === 'domain') return err.textContent = `Please use your student email (ending in @${res.domain}).`;
+        err.textContent = ERRORS[code] || 'Something went wrong. Please try again.';
+    }
+
+    // ── after a successful claim: email + show the tickets ─────
+    async function finishClaim(form, tickets) {
+        const sent = await sendTicketEmail(form, tickets);
+        if (sent) {
+            // Mark them sent so the admin "Email unsent tickets" button skips them
+            await _supabase.from('guests').update({ email_sent: 'Yes' }).in('id', tickets.map(t => t.id)).then(() => {}, () => {});
+        }
+        const count = tickets.length;
+        const cards = tickets.map(t => `<div class="ticket">
+            <div class="n">${count > 1 ? `Ticket ${t.number} of ${count}` : 'Your ticket'}</div>
+            <img src="${ticketQrUrl(t.id)}" alt="Ticket QR code">
+            <div class="id">ID: #${escapeHtml(String(t.id).substring(0, 8))}</div>
+        </div>`).join('');
+        showState('ok', count > 1 ? `You claimed ${count} tickets!` : 'You claimed a ticket!',
+            sent ? `We emailed ${count > 1 ? 'your tickets' : 'your ticket'} to ${form.email}. You can also screenshot ${count > 1 ? 'them' : 'it'} below — show the QR code at check-in.`
+                 : `Your ${count > 1 ? 'tickets are' : 'ticket is'} saved, but we couldn't send the email just now. Screenshot the QR code${count > 1 ? 's' : ''} below — CAB can also resend ${count > 1 ? 'them' : 'it'} to ${form.email}.`,
+            `<div class="tickets">${cards}</div>`);
+    }
+
+    let BREVO_API_KEY = '';
+    async function loadBrevoKey() {
+        if (BREVO_API_KEY) return BREVO_API_KEY;
+        const { data } = await _supabase.from('secrets').select('value').eq('name', 'BREVO_API_KEY').maybeSingle();
+        BREVO_API_KEY = (data?.value || '').trim();
+        return BREVO_API_KEY;
+    }
+
+    function fillVars(str, form, count) {
+        return (str || '').replace(/\{\{FIRST\}\}/g, form.first).replace(/\{\{LAST\}\}/g, form.last)
+            .replace(/\{\{EVENT\}\}/g, eventRow?.name || '').replace(/\{\{COUNT\}\}/g, String(count));
+    }
+
+    function ticketEmailHtml(bodyHtml, tickets) {
+        const banner = bannerSrc() ? `<tr><td style="padding:0;"><img src="${escapeHtml(bannerSrc())}" width="500" style="display:block;width:100%;height:auto;border:0;" alt="Event Banner"></td></tr>` : '';
+        const heading = eventRow?.heading_text || 'Event Info & Ticket';
+        const blocks = tickets.map(t => `
+            <tr><td style="padding:0 15px;"><div style="border-top:2px dashed #e5e7eb;height:1px;"></div></td></tr>
+            <tr><td align="center" style="padding:32px 30px;">
+                ${tickets.length > 1 ? `<p style="margin:0 0 14px;font-size:13px;font-weight:700;color:#52525b;text-transform:uppercase;letter-spacing:2px;font-family:sans-serif;">Ticket ${t.number} of ${tickets.length}</p>` : ''}
+                <table border="0" cellspacing="0" cellpadding="0" width="100%"><tr><td align="center" style="padding:25px;border-radius:16px;border:2px solid #eeeeee;">
+                    <img src="${ticketQrUrl(t.id)}" alt="Ticket QR Code" width="250" height="250" style="display:block;margin:0 auto;border:0;max-width:100%;height:auto;background:#fff;padding:10px;border-radius:8px;">
+                </td></tr></table>
+                <p style="margin:22px 0 0;font-size:14px;color:#1a1a1a;font-weight:700;text-transform:uppercase;letter-spacing:2px;font-family:sans-serif;">SCAN AT CHECK-IN</p>
+                <p style="margin:8px 0 0;font-size:12px;color:#888;font-family:monospace;">ID: #${escapeHtml(String(t.id).substring(0, 8))}</p>
+            </td></tr>`).join('');
+        return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+        <body style="margin:0;padding:0;background:#f3f4f6;font-family:'Segoe UI',Helvetica,Arial,sans-serif;">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f3f4f6;"><tr><td align="center" style="padding:20px;">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:500px;background:#fff;border-radius:16px;overflow:hidden;">
+            ${banner}
+            <tr><td align="center" style="padding:40px 24px 10px;">
+                <h1 style="margin:0;font-size:22px;font-weight:800;color:#000;text-transform:uppercase;letter-spacing:1px;font-family:sans-serif;">${escapeHtml(heading)}</h1>
+                <p style="margin:12px 0 0;font-size:11px;font-weight:700;color:#fff;background:#000;display:inline-block;padding:4px 12px;text-transform:uppercase;letter-spacing:2px;font-family:sans-serif;border-radius:4px;">Official Access Pass</p>
+            </td></tr>
+            <tr><td style="padding:20px 30px 32px;font-size:16px;color:#000;line-height:1.6;font-family:sans-serif;">${bodyHtml}</td></tr>
+            ${blocks}
+            <tr><td align="center" style="padding:30px 20px;border-top:1px solid #f0f0f0;font-size:11px;font-weight:700;color:#bbb;text-transform:uppercase;letter-spacing:1px;font-family:sans-serif;">&copy; ${new Date().getFullYear()} Canyon Activities Board</td></tr>
+        </table></td></tr></table></body></html>`;
+    }
+
+    async function sendTicketEmail(form, tickets) {
+        try {
+            if (!tickets.length || !(await loadBrevoKey())) return false;
+            const count = tickets.length;
+            const body = fillVars(info?.email_body || DEFAULT_EMAIL_BODY, form, count);
+            const bodyHtml = escapeHtml(body).replace(/\*\*(.*?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>');
+            const text = body.replace(/\*\*(.*?)\*\*/g, '$1') + '\n\n' + tickets.map(t => `Ticket ${t.number}: ${t.id}`).join('\n');
+            const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+                method: 'POST',
+                headers: { 'accept': 'application/json', 'api-key': BREVO_API_KEY, 'content-type': 'application/json' },
+                body: JSON.stringify({
+                    sender: { name: SENDER_NAME, email: SENDER_EMAIL },
+                    to: [{ email: form.email, name: `${form.first} ${form.last}` }],
+                    subject: fillVars(info?.email_subject || DEFAULT_EMAIL_SUBJECT, form, count),
+                    htmlContent: ticketEmailHtml(bodyHtml, tickets),
+                    textContent: text
+                })
+            });
+            return res.ok;
+        } catch (e) { console.error('Email failed', e); return false; }
+    }
+
+    // Coming back to a background tab: check right away instead of waiting for the timer
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && !submitting && view !== 'done' && eventRow) schedule(poll, 0);
+    });
+
+    // ── start ──────────────────────────────────────────────────
+    (async function init() {
+        if (!eventId) {
+            showState('no', 'Link not valid', 'This ticket link is incomplete. Please use the link CAB shared with you.');
+            return;
+        }
+        try {
+            const { data } = await _supabase.from('events').select('id, name, banner_url, heading_text').eq('id', eventId).maybeSingle();
+            eventRow = data;
+            if (!eventRow) { showState('no', 'Event not found', 'This event is no longer available.'); return; }
+            document.getElementById('eventName').textContent = eventRow.name;
+        } catch (e) {
+            console.error(e);
+            showState('no', 'Something went wrong', 'Please refresh the page and try again.');
+            return;
+        }
+        poll();
+    })();
+</script>
+</body>
+</html>
