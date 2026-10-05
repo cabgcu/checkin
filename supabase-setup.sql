@@ -2,7 +2,8 @@
 -- CAB VIP Check In — Supabase setup for the email template features
 --
 -- Safe to run on an existing database, and safe to run more than once:
---   * nothing is dropped, deleted, truncated or overwritten
+--   * no data is dropped, deleted, truncated or overwritten (only an older
+--     version of the live-ticket claim function is replaced)
 --   * tables/columns are only added if missing (IF NOT EXISTS)
 --   * policies are only created if a policy with that name doesn't exist
 --   * Row Level Security is NOT switched on or off for any table
@@ -327,11 +328,19 @@ begin
 end $$;
 
 -- The claim itself. Everything is checked again here, under a lock, so
--- the ticket limit, the per-person limit and "one claim per student" hold
+-- the ticket limit, the per-person limit and "one ticket per student" hold
 -- no matter how many people submit at once.
+--
+-- p_guests: one entry per extra ticket, each for a different student:
+--   [{ "first": "...", "last": "...", "email": "...", "student_id": "..." }, ...]
+-- Tickets claimed = 1 (the person filling out the form) + number of guests.
+--
+-- (Replaces the first version of this function, which took a ticket count.)
+drop function if exists public.claim_live_tickets(text, text, text, text, text, text, integer, uuid);
+
 create or replace function public.claim_live_tickets(
     p_event_id text, p_first text, p_last text, p_email text, p_phone text,
-    p_student_id text, p_quantity integer, p_token uuid default null)
+    p_student_id text, p_guests jsonb default '[]'::jsonb, p_token uuid default null)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
     s        public.live_ticket_settings;
@@ -339,27 +348,56 @@ declare
     v_state  text;
     v_left   integer;
     v_claim  uuid := gen_random_uuid();
-    v_first  text := btrim(coalesce(p_first, ''));
-    v_last   text := btrim(coalesce(p_last, ''));
-    v_email  text := lower(btrim(coalesce(p_email, '')));
     v_phone  text := btrim(coalesce(p_phone, ''));
-    v_sid    text := btrim(coalesce(p_student_id, ''));
     v_domain text;
+    v_people jsonb := '[]'::jsonb;   -- the claimer first, then each guest
+    v_p      jsonb;
+    v_qty    integer;
+    v_first  text;
+    v_last   text;
+    v_email  text;
+    v_sid    text;
+    v_host   text;
     v_ids    jsonb := '[]'::jsonb;
     v_id     text;
-    i        integer;
+    i        integer := 0;
 begin
-    if v_first = '' or v_last = '' or length(v_first) > 80 or length(v_last) > 80 then
-        return jsonb_build_object('ok', false, 'error', 'name');
+    if p_guests is null then p_guests := '[]'::jsonb; end if;
+    if jsonb_typeof(p_guests) <> 'array' then
+        return jsonb_build_object('ok', false, 'error', 'guests');
     end if;
-    if v_email !~ '^[^\s@]+@[^\s@]+\.[^\s@]+$' or length(v_email) > 200 then
-        return jsonb_build_object('ok', false, 'error', 'email');
-    end if;
+
+    v_people := jsonb_build_array(jsonb_build_object(
+        'first', btrim(coalesce(p_first, '')), 'last', btrim(coalesce(p_last, '')),
+        'email', lower(btrim(coalesce(p_email, ''))), 'student_id', btrim(coalesce(p_student_id, ''))));
+    for v_p in select value from jsonb_array_elements(p_guests) loop
+        v_people := v_people || jsonb_build_array(jsonb_build_object(
+            'first', btrim(coalesce(v_p->>'first', '')), 'last', btrim(coalesce(v_p->>'last', '')),
+            'email', lower(btrim(coalesce(v_p->>'email', ''))), 'student_id', btrim(coalesce(v_p->>'student_id', ''))));
+    end loop;
+    v_qty := jsonb_array_length(v_people);
+
+    -- Everyone needs a name, a valid email and a student ID ('who' = 0 for the claimer, 1+ for guests)
+    for v_p in select value from jsonb_array_elements(v_people) loop
+        if v_p->>'first' = '' or v_p->>'last' = '' or length(v_p->>'first') > 80 or length(v_p->>'last') > 80 then
+            return jsonb_build_object('ok', false, 'error', 'name', 'who', i);
+        end if;
+        if (v_p->>'email') !~ '^[^\s@]+@[^\s@]+\.[^\s@]+$' or length(v_p->>'email') > 200 then
+            return jsonb_build_object('ok', false, 'error', 'email', 'who', i);
+        end if;
+        if v_p->>'student_id' = '' or length(v_p->>'student_id') > 40 then
+            return jsonb_build_object('ok', false, 'error', 'student_id', 'who', i);
+        end if;
+        i := i + 1;
+    end loop;
     if length(regexp_replace(v_phone, '\D', '', 'g')) < 7 or length(v_phone) > 40 then
-        return jsonb_build_object('ok', false, 'error', 'phone');
+        return jsonb_build_object('ok', false, 'error', 'phone', 'who', 0);
     end if;
-    if v_sid = '' or length(v_sid) > 40 then
-        return jsonb_build_object('ok', false, 'error', 'student_id');
+
+    -- The same student can't be on one claim twice
+    if (select count(distinct x->>'email') from jsonb_array_elements(v_people) x) < v_qty
+       or (select count(distinct lower(x->>'student_id')) from jsonb_array_elements(v_people) x) < v_qty then
+        return jsonb_build_object('ok', false, 'error', 'same_person');
     end if;
 
     select id into v_event from public.events where id::text = p_event_id;
@@ -379,11 +417,17 @@ begin
     end if;
 
     v_domain := lower(ltrim(btrim(coalesce(s.email_domain, '')), '@'));
-    if v_domain <> '' and right(v_email, length(v_domain) + 1) <> '@' || v_domain then
-        return jsonb_build_object('ok', false, 'error', 'domain', 'domain', v_domain);
+    if v_domain <> '' then
+        i := 0;
+        for v_p in select value from jsonb_array_elements(v_people) loop
+            if right(v_p->>'email', length(v_domain) + 1) <> '@' || v_domain then
+                return jsonb_build_object('ok', false, 'error', 'domain', 'domain', v_domain, 'who', i);
+            end if;
+            i := i + 1;
+        end loop;
     end if;
 
-    if p_quantity is null or p_quantity < 1 or p_quantity > greatest(s.per_claim_limit, 1) then
+    if v_qty > greatest(s.per_claim_limit, 1) then
         return jsonb_build_object('ok', false, 'error', 'quantity', 'limit', greatest(s.per_claim_limit, 1));
     end if;
 
@@ -396,38 +440,45 @@ begin
         end if;
     end if;
 
-    if exists (select 1 from public.guests
-                where event_id::text = p_event_id and live_claim_id is not null
-                  and (lower(email) = v_email or lower(btrim(student_id)) = lower(v_sid))) then
-        return jsonb_build_object('ok', false, 'error', 'duplicate');
-    end if;
+    -- One ticket per student: nobody on this claim may already hold a live ticket
+    i := 0;
+    for v_p in select value from jsonb_array_elements(v_people) loop
+        if exists (select 1 from public.guests
+                    where event_id::text = p_event_id and live_claim_id is not null
+                      and (lower(email) = v_p->>'email' or lower(btrim(student_id)) = lower(v_p->>'student_id'))) then
+            return jsonb_build_object('ok', false, 'error', 'duplicate', 'who', i);
+        end if;
+        i := i + 1;
+    end loop;
 
     v_left := s.total_tickets - public.live_ticket_claimed(p_event_id);
     if v_left <= 0 then
         return jsonb_build_object('ok', false, 'error', 'sold_out', 'remaining', 0);
     end if;
-    if p_quantity > v_left then
+    if v_qty > v_left then
         return jsonb_build_object('ok', false, 'error', 'not_enough', 'remaining', v_left);
     end if;
 
-    for i in 1..p_quantity loop
+    v_host := (v_people->0->>'first') || ' ' || (v_people->0->>'last');
+    i := 0;
+    for v_p in select value from jsonb_array_elements(v_people) loop
         insert into public.guests (event_id, first_name, last_name, email, phone, student_id, team, status, email_sent, live_claim_id)
-        values (v_event, v_first,
-                case when i = 1 then v_last else v_last || ' (Ticket ' || i || ')' end,
-                v_email,
-                v_phone,
-                case when i = 1 then v_sid else null end,
-                case when i = 1 then 'Live Tickets' else 'Guest of ' || v_first || ' ' || v_last end,
+        values (v_event, v_p->>'first', v_p->>'last', v_p->>'email',
+                case when i = 0 then v_phone else null end,
+                v_p->>'student_id',
+                case when i = 0 then 'Live Tickets' else 'Guest of ' || v_host end,
                 'Invited', 'No', v_claim)
         returning id::text into v_id;
-        v_ids := v_ids || jsonb_build_object('id', v_id, 'number', i);
+        v_ids := v_ids || jsonb_build_object('id', v_id, 'number', i + 1,
+            'first', v_p->>'first', 'last', v_p->>'last', 'email', v_p->>'email');
+        i := i + 1;
     end loop;
 
     if p_token is not null then
         update public.live_ticket_queue set status = 'done' where token = p_token;
     end if;
 
-    return jsonb_build_object('ok', true, 'claim_id', v_claim, 'tickets', v_ids, 'remaining', v_left - p_quantity);
+    return jsonb_build_object('ok', true, 'claim_id', v_claim, 'tickets', v_ids, 'remaining', v_left - v_qty);
 end $$;
 
 -- Waiting-room numbers for the admin page
@@ -446,6 +497,6 @@ returns void language sql security definer set search_path = public as $$
 $$;
 
 grant execute on function public.live_ticket_status(text, uuid) to anon, authenticated;
-grant execute on function public.claim_live_tickets(text, text, text, text, text, text, integer, uuid) to anon, authenticated;
+grant execute on function public.claim_live_tickets(text, text, text, text, text, text, jsonb, uuid) to anon, authenticated;
 grant execute on function public.live_ticket_queue_stats(text) to anon, authenticated;
 grant execute on function public.live_ticket_queue_reset(text) to anon, authenticated;
