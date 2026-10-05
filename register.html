@@ -23,7 +23,14 @@
         }
         html { background: var(--app-bg); color-scheme: dark; }
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-        body { margin: 0; font-family: var(--font); font-size: 15px; color: var(--text-main); background: var(--app-bg); -webkit-font-smoothing: antialiased; }
+        body { margin: 0; font-family: var(--font); font-size: 15px; color: var(--text-main); background: transparent; -webkit-font-smoothing: antialiased; }
+        /* Page background photo. A fixed layer (not background-attachment: fixed) so it
+           also stays put on iPhone; the tint keeps text on top readable. */
+        #bg-container {
+            position: fixed; inset: 0; z-index: -1; pointer-events: none;
+            background: #131316 url('https://i.imgur.com/APGH0Wv.png') center / cover no-repeat;
+        }
+        #bg-container::after { content: ''; position: absolute; inset: 0; background: rgba(19, 19, 22, 0.55); }
         .wrap { max-width: 640px; margin: 0 auto; padding: 32px 16px 64px; padding-top: calc(32px + env(safe-area-inset-top)); }
         .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
         .brand img { height: 34px; }
@@ -102,6 +109,7 @@
     </style>
 </head>
 <body>
+<div id="bg-container"></div>
 <div class="wrap">
     <div class="brand">
         <img src="https://i.imgur.com/p2qZOL5.png" alt="CAB">
