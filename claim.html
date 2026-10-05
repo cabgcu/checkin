@@ -24,7 +24,10 @@
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         body { margin: 0; font-family: var(--font); font-size: 15px; color: var(--text-main); background: transparent; -webkit-font-smoothing: antialiased; }
         #bg-container {
-            position: fixed; inset: 0; z-index: -1; pointer-events: none;
+            position: fixed; top: 0; left: 0; right: 0; z-index: -1; pointer-events: none;
+            /* Sized to the tallest the screen gets (browser bars hidden), so no strip
+               shows at the bottom when the bars shrink while scrolling on a phone */
+            height: 100vh; height: 100lvh;
             background: #131316 url('https://i.imgur.com/APGH0Wv.png') center / cover no-repeat;
         }
         #bg-container::after { content: ''; position: absolute; inset: 0; background: rgba(19, 19, 22, 0.25); }
