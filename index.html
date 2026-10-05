@@ -158,17 +158,17 @@
 
         .side-bottom { margin-top: auto; padding-top: 16px; display: flex; flex-direction: column; gap: 10px; }
         .side-card {
-            background: #fff; color: #18181b; border-radius: 24px; padding: 20px;
-            text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            background: var(--card-bg); color: #fff; border: 1px solid var(--line);
+            border-radius: 24px; padding: 20px; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.15);
         }
         .side-card .tag { display: inline-block; background: var(--accent-purple); color: #fff; font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 8px; margin-bottom: 8px; }
         .side-card .big { font-size: 30px; font-weight: 700; letter-spacing: -0.02em; }
-        .side-card .big small { font-size: 16px; font-weight: 500; color: #71717a; }
-        .side-card p { margin: 2px 0 14px; font-size: 12px; color: #71717a; }
-        .side-card button { width: 100%; background: #18181b; color: #fff; border: none; border-radius: 9999px; padding: 10px; font: 500 13px var(--font-stack); cursor: pointer; }
-        .side-card button:hover { background: #27272a; }
+        .side-card .big small { font-size: 16px; font-weight: 500; color: var(--text-dim); }
+        .side-card p { margin: 2px 0 14px; font-size: 12px; color: var(--text-muted); }
+        .side-card button { width: 100%; background: var(--accent-blue); color: #fff; border: none; border-radius: 9999px; padding: 10px; font: 500 13px var(--font-stack); cursor: pointer; transition: background 0.15s; }
+        .side-card button:hover { background: var(--accent-blue-hover); }
 
-        .main { flex: 1; display: flex; flex-direction: column; min-width: 0; height: 100%; overflow: hidden; }
+        .main { flex: 1; display: flex; flex-direction: column; min-width: 0; height: 100%; overflow-y: auto; overscroll-behavior: contain; }
         .app-header {
             display: flex; align-items: center; justify-content: space-between; gap: 16px;
             padding: 18px 32px; border-bottom: 1px solid var(--line);
@@ -194,7 +194,7 @@
         .header-avatar { width: 40px; height: 40px; border-radius: 50%; background: #fff; display: flex; align-items: center; justify-content: center; overflow: hidden; border: 1px solid var(--line-strong); flex-shrink: 0; }
         .header-avatar img { width: 72%; height: auto; }
 
-        .content { flex: 1; overflow-y: auto; padding: 32px; }
+        .content { flex: 1 0 auto; padding: 32px; }
         .view { max-width: 1280px; margin: 0 auto; }
 
         /* ── LIST VIEW ── */
@@ -345,7 +345,7 @@
         /* No backdrop-filter here: blurring the page behind a scrolling panel makes Safari/Chrome flash white */
         .modal-overlay { position: fixed; inset: 0; background: rgba(9, 9, 11, 0.78); z-index: 10000; display: none; align-items: center; justify-content: center; padding: 20px; overflow: hidden; overscroll-behavior: contain; transition: opacity 0.25s ease; }
         .modal-content { background: rgba(34, 34, 40, 0.94); border: 1px solid rgba(63,63,70,0.5); box-shadow: 0 25px 50px rgba(0,0,0,0.5); padding: 32px; border-radius: var(--radius-xl); width: 100%; max-width: 760px; position: relative; max-height: 90vh; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; transform: translateZ(0); }
-        body.modal-open, body.modal-open .content { overflow: hidden; }
+        body.modal-open, body.modal-open .main { overflow: hidden; }
         .close-modal { position: absolute; top: 16px; right: 16px; width: 34px; height: 34px; border-radius: 50%; background: var(--card-bg); border: 1px solid var(--line-strong); color: var(--text-muted); font-size: 1.3rem; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 10; }
         .close-modal:hover { color: #fff; }
 
@@ -458,7 +458,7 @@
             .app-container { height: auto; min-height: 100vh; overflow: visible; }
             .sidebar { display: none; }
             .main { height: auto; overflow: visible; }
-            .app-header { position: sticky; top: 0; z-index: 50; background: rgba(19, 19, 22, 0.92); padding: 12px 16px; padding-top: calc(12px + env(safe-area-inset-top)); gap: 10px; }
+            .app-header { position: static; background: transparent; border-bottom: none; padding: 12px 16px; padding-top: calc(12px + env(safe-area-inset-top)); gap: 10px; }
             .app-header { flex-wrap: nowrap; }
             .app-header .header-actions { margin-left: 0; }
             .mobile-event { display: block; flex: 1; min-width: 0; padding: 0; }
@@ -468,7 +468,7 @@
             .mobile-event label { display: none; }
             .mobile-event select { font-size: 16px; padding: 12px 36px 12px 14px; border-radius: 9999px; }
             .header-actions .btn-action, .header-actions .icon-btn.desk { display: none; }
-            .content { overflow: visible; padding: 16px 16px 96px; }
+            .content { padding: 16px 16px 96px; }
             .mobile-bottom-nav { display: flex; }
             .mobile-camera-btn { display: flex; }
             .mobile-only { display: block; }
@@ -702,7 +702,7 @@
         </div>
     </aside>
 
-    <main class="main">
+    <main class="main" id="mainScroll">
         <!-- HEADER -->
         <header class="app-header">
             <!-- Phones: the sidebar is hidden, so the event picker lives here -->
@@ -2755,8 +2755,8 @@
         }
         if (v === 'settings') updatePreview();
         window.scrollTo(0, 0);
-        const content = document.getElementById('content');
-        if (content) content.scrollTop = 0;
+        const mainScroll = document.getElementById('mainScroll');
+        if (mainScroll) mainScroll.scrollTop = 0;
     }
 
     function switchSettingsTab(tabId) {
