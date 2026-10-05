@@ -547,6 +547,7 @@
         <div class="mb-4">
             <input type="password" id="login-password" class="modern-input" placeholder="System Password" style="text-align: center;">
             <p id="login-error" style="color: var(--danger-text); font-size: 0.8rem; margin-top: 10px; font-weight: 600; display: none;">Invalid Password</p>
+            <label class="check-row" style="justify-content:center; margin-top:14px;"><input type="checkbox" id="login-remember" checked> Keep me signed in on this device for 30 days</label>
         </div>
         <button onclick="handleLogin()" class="btn-action" style="width: 100%; padding: 15px; font-size: 1rem;">LOG IN</button>
     </div>
@@ -1020,7 +1021,7 @@
         const error = document.getElementById('login-error');
         
         if (input.value === SYSTEM_PASSWORD) {
-            sessionStorage.setItem('cab_vip_auth', 'true');
+            rememberLogin(document.getElementById('login-remember').checked);
             unlockApp();
         } else {
             error.style.display = 'block';
@@ -1052,7 +1053,7 @@
     function handleLogout() {
         if (!confirm("Log out of the VIP Check In system?")) return;
         if (_qrStream) stopCameraScanner();
-        sessionStorage.removeItem('cab_vip_auth');
+        forgetLogin();
         location.reload();
     }
 
@@ -3077,10 +3078,35 @@
     }
     new MutationObserver(syncModalScrollLock).observe(document.body, { subtree: true, attributes: true, attributeFilter: ['style'] });
 
+    // Sign-in is remembered per device: for 30 days when "Keep me signed in" is ticked,
+    // otherwise until the browser tab closes. Logging out clears both.
+    const AUTH_KEY = 'cab_vip_auth';
+    const AUTH_REMEMBER_MS = 30 * 24 * 60 * 60 * 1000;
+
+    function rememberLogin(keep) {
+        try {
+            sessionStorage.setItem(AUTH_KEY, 'true');
+            if (keep) localStorage.setItem(AUTH_KEY, String(Date.now() + AUTH_REMEMBER_MS));
+            else localStorage.removeItem(AUTH_KEY);
+        } catch (e) { /* storage blocked (private mode) — stay signed in for this page only */ }
+    }
+
+    function forgetLogin() {
+        try { sessionStorage.removeItem(AUTH_KEY); localStorage.removeItem(AUTH_KEY); } catch (e) {}
+    }
+
+    function isLoginRemembered() {
+        try {
+            if (sessionStorage.getItem(AUTH_KEY) === 'true') return true;
+            const until = Number(localStorage.getItem(AUTH_KEY));
+            if (until && until > Date.now()) return true;
+            localStorage.removeItem(AUTH_KEY);
+        } catch (e) {}
+        return false;
+    }
+
     window.onload = () => { 
-        if (sessionStorage.getItem('cab_vip_auth') === 'true') {
-            unlockApp();
-        }
+        if (isLoginRemembered()) unlockApp();
     };
 </script>
 </body>
