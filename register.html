@@ -174,7 +174,7 @@
     // Main-contact rows for this event with this email (case-insensitive exact match)
     async function findHostsByEmail(eventId, email) {
         const pattern = email.replace(/[\\%_]/g, '\\$&');
-        const { data } = await _supabase.from('guests').select('id, first_name, last_name, email, team')
+        const { data } = await _supabase.from('guests').select('id, first_name, last_name, team')
             .eq('event_id', eventId).ilike('email', pattern);
         return (data || []).filter(g => !(g.team || '').startsWith('Guest of '));
     }
@@ -438,9 +438,11 @@
 
     // ── manage an existing registration ────────────────────────
     let manageHost = null, manageGuests = [], removedIds = new Set(), newGuestSeq = 0;
+    const MANAGE_COLUMNS = 'id, event_id, first_name, last_name, team, status, email_sent, shirt_size';
 
     async function initManage(hostId) {
-        const { data: host } = await _supabase.from('guests').select('*').eq('id', hostId).maybeSingle();
+        // Contact details (email, phone) are deliberately not loaded here — only admins see them
+        const { data: host } = await _supabase.from('guests').select(MANAGE_COLUMNS).eq('id', hostId).maybeSingle();
         if (!host || (host.team || '').startsWith('Guest of ')) {
             showState('no', 'Registration not found', "We couldn't find this registration. Contact the CAB Special Events team for help.");
             return;
@@ -452,7 +454,7 @@
         cfg = formType ? vipFormConfig(await loadFormsStore(), eventRow.id, formType) : null;
 
         manageHost = host;
-        const { data: guests } = await _supabase.from('guests').select('*')
+        const { data: guests } = await _supabase.from('guests').select(MANAGE_COLUMNS)
             .eq('event_id', eventRow.id).eq('team', hostTeamFor(host.first_name, host.last_name)).order('first_name');
         manageGuests = guests || [];
         removedIds = new Set();
@@ -477,7 +479,7 @@
                 <div class="grid">
                     <div class="field"><label>First name</label><input data-f="first" value="${escapeHtml(g.first_name || '')}" ${d}></div>
                     <div class="field"><label>Last name</label><input data-f="last" value="${escapeHtml(g.last_name || '')}" ${d}></div>
-                    <div class="field ${cfg?.askShirt ? '' : 'full'}"><label>Email ${g.email_sent === 'Yes' ? '<span class="muted">(changing it sends a new ticket)</span>' : ''}</label><input type="email" data-f="email" value="${escapeHtml(g.email || '')}" ${d}></div>
+                    <div class="field ${cfg?.askShirt ? '' : 'full'}"><label>${isNew ? 'Email <span class="req">*</span> <span class="muted">(ticket is sent here)</span>' : `New email <span class="muted">(optional${g.email_sent === 'Yes' ? ' · sends a new ticket' : ''})</span>`}</label><input type="email" data-f="email" autocomplete="off" placeholder="${isNew ? '' : 'On file — leave blank to keep'}" ${d}></div>
                     ${cfg?.askShirt ? `<div class="field"><label>Shirt size</label><select data-f="shirt" ${d}>${shirtOptions(g.shirt_size || '')}</select></div>` : ''}
                 </div></div>`;
         };
@@ -490,8 +492,8 @@
             <div class="grid">
                 <div class="field"><label>First name</label><input id="mFirst" value="${escapeHtml(h.first_name || '')}" ${dis}></div>
                 <div class="field"><label>Last name</label><input id="mLast" value="${escapeHtml(h.last_name || '')}" ${dis}></div>
-                <div class="field ${cfg?.askPhone ? '' : 'full'}"><label>Email <span class="muted">(contact CAB to change)</span></label><input value="${escapeHtml(h.email || '')}" disabled></div>
-                ${cfg?.askPhone ? `<div class="field"><label>Phone</label><input id="mPhone" type="tel" value="${escapeHtml(h.phone || '')}" ${dis}></div>` : ''}
+                <div class="field ${cfg?.askPhone ? '' : 'full'}"><label>Email <span class="muted">(contact CAB to change)</span></label><input value="On file" disabled></div>
+                ${cfg?.askPhone ? `<div class="field"><label>New phone <span class="muted">(optional)</span></label><input id="mPhone" type="tel" autocomplete="off" placeholder="Leave blank to keep" ${dis}></div>` : ''}
                 ${isStaff ? `<div class="field ${cfg?.askShirt ? '' : 'full'}"><label>Department</label><select id="mDept" ${dis}>${VIP_FORM_STAFF_DEPTS.map(d => `<option ${d === h.team ? 'selected' : ''}>${escapeHtml(d)}</option>`).join('')}${VIP_FORM_STAFF_DEPTS.includes(h.team) ? '' : `<option selected>${escapeHtml(h.team)}</option>`}</select></div>` : ''}
                 ${cfg?.askShirt && def?.ticketedHost ? `<div class="field"><label>Shirt size</label><select id="mShirt" ${dis}>${shirtOptions(h.shirt_size || '')}</select></div>` : ''}
             </div>
@@ -551,7 +553,7 @@
         }).filter(r => !r.isNew || r.first || r.last || r.email);
         for (const r of rows) {
             if (!r.first || !r.last) return err.textContent = 'Every guest needs a first and last name.';
-            if (!isEmail(r.email)) return err.textContent = `Please enter a valid email for ${r.first}.`;
+            if ((r.isNew || r.email) && !isEmail(r.email)) return err.textContent = r.isNew ? `Please enter a valid email for ${r.first}.` : `The new email for ${r.first} doesn't look right.`;
             if (cfg.askShirt && !r.shirt) return err.textContent = `Please choose a shirt size for ${r.first}.`;
         }
         if (!def.ticketedHost && rows.length === 0) return err.textContent = 'Please keep at least one guest.';
@@ -561,7 +563,7 @@
             const oldTeam = hostTeamFor(manageHost.first_name, manageHost.last_name);
             const newTeam = hostTeamFor(first, last);
             const hostUpdate = { first_name: first, last_name: last };
-            if (cfg.askPhone) hostUpdate.phone = v('mPhone') || null;
+            if (cfg.askPhone && v('mPhone')) hostUpdate.phone = v('mPhone');
             if (formType === 'staff' && v('mDept')) hostUpdate.team = v('mDept');
             if (cfg.askShirt && def.ticketedHost) hostUpdate.shirt_size = v('mShirt') || null;
             const ops = [_supabase.from('guests').update(hostUpdate).eq('id', manageHost.id)];
@@ -581,9 +583,10 @@
                     if (g && oldTeam !== newTeam) ops.push(_supabase.from('guests').update({ team: newTeam }).eq('id', g.id));
                     continue;
                 }
-                const fields = { first_name: r.first, last_name: r.last, email: r.email, team: newTeam };
+                const fields = { first_name: r.first, last_name: r.last, team: newTeam };
+                if (r.email) fields.email = r.email;   // blank keeps the email on file
                 if (cfg.askShirt) fields.shirt_size = r.shirt || null;
-                if (r.email.toLowerCase() !== (g.email || '').toLowerCase() && g.email_sent === 'Yes') {
+                if (r.email && g.email_sent === 'Yes') {
                     // The old ticket went to someone else's inbox: issue a new ticket id and drop the old one
                     ops.push((async () => {
                         const { error } = await _supabase.from('guests').insert([{ ...fields, event_id: eventRow.id, status: g.status, email_sent: 'No' }]);
