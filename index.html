@@ -23,10 +23,11 @@
         :root {
             /* Palette — flat charcoal dashboard */
             --app-bg: #131316;
-            --card-bg: #1c1c22;
-            --sidebar-bg: #16161a;
-            --highlight-bg: #2a2a32;
-            --inset-bg: #18181b;
+            --card-bg: rgba(28, 28, 34, 0.68);
+            --solid-bg: #1c1c22;
+            --sidebar-bg: rgba(22, 22, 26, 0.6);
+            --highlight-bg: rgba(255, 255, 255, 0.1);
+            --inset-bg: rgba(12, 12, 16, 0.45);
             --accent-blue: #2563eb;
             --accent-blue-hover: #1d4ed8;
             --accent-purple: #8b5cf6;
@@ -88,7 +89,7 @@
             position: fixed; inset: 0; z-index: -1; pointer-events: none;
             background: #131316 url('https://i.imgur.com/APGH0Wv.png') center / cover no-repeat;
         }
-        #bg-container::after { content: ''; position: absolute; inset: 0; background: rgba(19, 19, 22, 0.55); }
+        #bg-container::after { content: ''; position: absolute; inset: 0; background: rgba(19, 19, 22, 0.25); }
 
         ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
@@ -118,7 +119,7 @@
 
         .sidebar {
             width: 256px; flex-shrink: 0;
-            background: rgba(22, 22, 26, 0.88);
+            background: var(--sidebar-bg);
             border-right: 1px solid var(--line);
             display: flex; flex-direction: column;
             padding: 28px 16px 16px;
@@ -139,7 +140,7 @@
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
             background-repeat: no-repeat; background-position: right 10px center; background-size: 14px;
         }
-        .side-event select option { background: var(--card-bg); }
+        .side-event select option { background: var(--solid-bg); }
         .mobile-event { display: none; }
 
         .side-nav { display: flex; flex-direction: column; gap: 4px; }
@@ -218,12 +219,18 @@
         .big-number .of { font-size: 20px; font-weight: 500; color: var(--text-dim); }
         .trend { display: inline-flex; align-items: center; gap: 4px; color: var(--success-text); background: var(--success-bg); padding: 4px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; }
         .progress-ring {
-            --p: 0;
-            width: 132px; height: 132px; border-radius: 50%; flex-shrink: 0;
-            background: conic-gradient(var(--accent-purple) calc(var(--p) * 1%), #27272a 0);
+            --p: 0; --ring: 18px;
+            width: 132px; height: 132px; border-radius: 50%; flex-shrink: 0; position: relative;
             display: flex; align-items: center; justify-content: center;
         }
-        .progress-ring .hole { width: 96px; height: 96px; border-radius: 50%; background: var(--card-bg); display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        /* Ring drawn on its own layer with a masked-out centre, so the card behind shows through */
+        .progress-ring::before {
+            content: ''; position: absolute; inset: 0; border-radius: 50%;
+            background: conic-gradient(var(--accent-purple) calc(var(--p) * 1%), rgba(255, 255, 255, 0.12) 0);
+            -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - var(--ring)), #000 calc(100% - var(--ring) + 1px));
+                    mask: radial-gradient(farthest-side, transparent calc(100% - var(--ring)), #000 calc(100% - var(--ring) + 1px));
+        }
+        .progress-ring .hole { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; }
         .progress-ring .hole b { font-size: 22px; font-weight: 700; }
         .progress-ring .hole span { font-size: 11px; color: var(--text-muted); }
 
@@ -282,7 +289,7 @@
             background-repeat: no-repeat; background-position: right 12px center; background-size: 15px;
             padding-right: 36px; cursor: pointer;
         }
-        select.modern-input option, select.modern-input optgroup { background-color: var(--card-bg); color: var(--text-main); }
+        select.modern-input option, select.modern-input optgroup { background-color: var(--solid-bg); color: var(--text-main); }
         .modern-input:focus { border-color: #52525b; }
 
         .btn-action {
@@ -337,7 +344,7 @@
         /* ── MODALS ── */
         /* No backdrop-filter here: blurring the page behind a scrolling panel makes Safari/Chrome flash white */
         .modal-overlay { position: fixed; inset: 0; background: rgba(9, 9, 11, 0.78); z-index: 10000; display: none; align-items: center; justify-content: center; padding: 20px; overflow: hidden; overscroll-behavior: contain; transition: opacity 0.25s ease; }
-        .modal-content { background: #222228; border: 1px solid rgba(63,63,70,0.5); box-shadow: 0 25px 50px rgba(0,0,0,0.5); padding: 32px; border-radius: var(--radius-xl); width: 100%; max-width: 760px; position: relative; max-height: 90vh; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; transform: translateZ(0); }
+        .modal-content { background: rgba(34, 34, 40, 0.94); border: 1px solid rgba(63,63,70,0.5); box-shadow: 0 25px 50px rgba(0,0,0,0.5); padding: 32px; border-radius: var(--radius-xl); width: 100%; max-width: 760px; position: relative; max-height: 90vh; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; transform: translateZ(0); }
         body.modal-open, body.modal-open .content { overflow: hidden; }
         .close-modal { position: absolute; top: 16px; right: 16px; width: 34px; height: 34px; border-radius: 50%; background: var(--card-bg); border: 1px solid var(--line-strong); color: var(--text-muted); font-size: 1.3rem; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; z-index: 10; }
         .close-modal:hover { color: #fff; }
@@ -395,7 +402,7 @@
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2.5'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");
             background-repeat: no-repeat; background-position: right 9px center; background-size: 12px;
         }
-        .fb-select option { background: var(--card-bg); }
+        .fb-select option { background: var(--solid-bg); }
         .defaults-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; padding: 12px 16px; background: var(--card-bg); border: 1px solid var(--line); border-radius: 16px; }
         .defaults-row .lbl { font-size: 12px; color: var(--text-muted); font-weight: 500; margin-right: 4px; }
         .defaults-row .lbl-sm { font-size: 12px; color: var(--text-dim); margin-left: 6px; }
@@ -435,7 +442,7 @@
         .link-btn.muted { color: var(--text-muted); }
 
         /* Mobile bottom nav */
-        .mobile-bottom-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; z-index: 9999; background: var(--sidebar-bg); border-top: 1px solid var(--line); padding: 4px 0 calc(4px + env(safe-area-inset-bottom)); justify-content: space-around; }
+        .mobile-bottom-nav { display: none; position: fixed; bottom: 0; left: 0; right: 0; z-index: 9999; background: rgba(22, 22, 26, 0.94); border-top: 1px solid var(--line); padding: 4px 0 calc(4px + env(safe-area-inset-bottom)); justify-content: space-around; }
         .mob-nav-btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; background: none; border: none; color: var(--text-dim); font: 500 10px var(--font-stack); cursor: pointer; padding: 8px 0 4px; flex: 1; min-width: 0; }
         .mob-nav-btn.active { color: #fff; }
         .mob-nav-btn svg { stroke: currentColor; width: 22px; height: 22px; fill: none; stroke-linecap: round; stroke-linejoin: round; }
@@ -472,8 +479,7 @@
             .card { padding: 18px; }
             .overview-top { align-items: center; }
             .big-number .n { font-size: 38px; }
-            .progress-ring { width: 96px; height: 96px; }
-            .progress-ring .hole { width: 70px; height: 70px; }
+            .progress-ring { width: 96px; height: 96px; --ring: 13px; }
             .progress-ring .hole b { font-size: 17px; }
             .stat-grid { gap: 12px; }
             .stat-grid .v { font-size: 18px; }
