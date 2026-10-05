@@ -12,7 +12,7 @@
     <script src="vip-forms.js"></script>
     <style>
         :root {
-            --app-bg: #131316; --card-bg: #1c1c22; --inset-bg: #18181b; --highlight-bg: #2a2a32;
+            --app-bg: #131316; --card-bg: rgba(28, 28, 34, 0.68); --solid-bg: #1c1c22; --inset-bg: rgba(12, 12, 16, 0.45); --highlight-bg: rgba(255, 255, 255, 0.1);
             --accent-blue: #2563eb; --accent-blue-hover: #1d4ed8; --accent-purple: #8b5cf6;
             --text-main: #fff; --text-muted: #9ca3af; --text-dim: #71717a;
             --line: rgba(39, 39, 42, 0.8); --line-strong: #3f3f46;
@@ -30,7 +30,7 @@
             position: fixed; inset: 0; z-index: -1; pointer-events: none;
             background: #131316 url('https://i.imgur.com/APGH0Wv.png') center / cover no-repeat;
         }
-        #bg-container::after { content: ''; position: absolute; inset: 0; background: rgba(19, 19, 22, 0.55); }
+        #bg-container::after { content: ''; position: absolute; inset: 0; background: rgba(19, 19, 22, 0.25); }
         .wrap { max-width: 640px; margin: 0 auto; padding: 32px 16px 64px; padding-top: calc(32px + env(safe-area-inset-top)); }
         .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
         .brand img { height: 34px; }
@@ -61,7 +61,7 @@
         select { appearance: none; -webkit-appearance: none; padding-right: 36px; cursor: pointer;
             background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
             background-repeat: no-repeat; background-position: right 12px center; background-size: 15px; }
-        select option { background: var(--card-bg); }
+        select option { background: var(--solid-bg); }
 
         .guest { background: var(--inset-bg); border: 1px solid var(--line); border-radius: 18px; padding: 16px; margin-bottom: 12px; }
         .guest-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 10px; }
