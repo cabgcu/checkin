@@ -97,6 +97,14 @@
         .ticket .n { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #52525b; margin-bottom: 10px; }
         .ticket .id { font: 12px monospace; color: #71717a; margin-top: 8px; }
 
+        .section-title { font-size: 12px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; margin: 28px 0 12px; }
+        .guest { background: var(--inset-bg); border: 1px solid var(--line); border-radius: 18px; padding: 16px; margin-bottom: 12px; }
+        .guest-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 10px; }
+        .guest-head strong { font-size: 14px; }
+        .guest .grid { gap: 12px; margin-top: 0; }
+        .link { background: none; border: none; color: #60a5fa; font: 500 14px var(--font); cursor: pointer; padding: 0; }
+        .link.danger { color: var(--danger-text); }
+        .ticket .who { font-size: 16px; font-weight: 700; margin-bottom: 2px; }
         .error { color: var(--danger-text); font-size: 14px; margin-top: 14px; min-height: 1px; }
         .spinner { width: 28px; height: 28px; margin: 60px auto; border: 3px solid rgba(255,255,255,0.12); border-top-color: var(--accent-purple); border-radius: 50%; animation: spin 0.8s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
@@ -163,6 +171,7 @@
     function setToken(t) { try { t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY); } catch {} }
     const emailDomain = () => (info?.email_domain || '').trim().replace(/^@/, '').toLowerCase();
     const perClaim = () => Math.max(1, info?.per_claim_limit || 1);
+    // Tickets this checkout can still take (including the person filling it out)
     const maxPick = () => Math.max(1, Math.min(perClaim(), info?.remaining || 1));
 
     function bannerSrc() { return processImageUrl(info?.banner_url || eventRow?.banner_url || ''); }
@@ -292,11 +301,8 @@
     }
 
     // ── the claim form ─────────────────────────────────────────
-    function qtyOptions(selected) {
-        const max = maxPick();
-        const sel = Math.min(selected || 1, max);
-        return Array.from({ length: max }, (_, i) => i + 1).map(n => `<option value="${n}" ${n === sel ? 'selected' : ''}>${n} ticket${n === 1 ? '' : 's'}</option>`).join('');
-    }
+    let guestSeq = 0;
+    const guestCount = () => document.querySelectorAll('#guestList .guest').length;
 
     function renderForm() {
         view = 'form';
@@ -308,20 +314,57 @@
             <div class="stock" id="stock"><span class="muted">Tickets left</span><b id="stockLeft"></b></div>
             <div class="hold" id="hold"></div>
             <form id="claimForm" novalidate>
-                <div class="grid">
+                ${multi ? '<div class="section-title">Your info</div>' : ''}
+                <div class="grid" ${multi ? 'style="margin-top:0;"' : ''}>
                     <div class="field"><label>First name <span class="req">*</span></label><input id="cFirst" autocomplete="given-name" maxlength="80" required></div>
                     <div class="field"><label>Last name <span class="req">*</span></label><input id="cLast" autocomplete="family-name" maxlength="80" required></div>
                     <div class="field full"><label>Student email <span class="req">*</span> <span class="muted">(your ticket is sent here)</span></label><input type="email" id="cEmail" autocomplete="email" maxlength="200" placeholder="${domain ? 'you@' + escapeHtml(domain) : ''}" required></div>
                     <div class="field"><label>Phone number <span class="req">*</span></label><input type="tel" id="cPhone" autocomplete="tel" maxlength="40" required></div>
                     <div class="field"><label>Student ID number <span class="req">*</span></label><input id="cStudentId" inputmode="numeric" autocomplete="off" maxlength="40" required></div>
-                    ${multi ? `<div class="field full"><label>How many tickets? <span class="muted">(up to ${perClaim()})</span></label><select id="cQty"></select></div>` : ''}
                 </div>
+                ${multi ? `
+                    <div class="section-title">Tickets for other students <span style="text-transform:none; letter-spacing:0;">· up to ${perClaim() - 1}</span></div>
+                    <p class="muted" style="margin:-4px 0 12px; font-size:13px; line-height:1.5;">Each extra ticket is for a different student. Their ticket is emailed to them, and you get a copy.</p>
+                    <div id="guestList"></div>
+                    <button type="button" class="btn secondary block" id="addGuestBtn" onclick="addGuest()"></button>` : ''}
                 <div class="error" id="formError"></div>
                 <div class="actions"><button type="submit" class="btn block" id="submitBtn">Claim ticket</button></div>
             </form>
         </div>`;
         document.getElementById('claimForm').addEventListener('submit', submitClaim);
         updateForm();
+    }
+
+    function addGuest() {
+        if (1 + guestCount() >= maxPick()) return;
+        const i = guestSeq++;
+        const domain = emailDomain();
+        document.getElementById('guestList').insertAdjacentHTML('beforeend', `<div class="guest" id="guest-${i}">
+            <div class="guest-head"><strong>Ticket for another student</strong><button type="button" class="link danger" onclick="removeGuest(${i})">Remove</button></div>
+            <div class="grid">
+                <div class="field"><label>First name <span class="req">*</span></label><input data-f="first" autocomplete="off" maxlength="80" required></div>
+                <div class="field"><label>Last name <span class="req">*</span></label><input data-f="last" autocomplete="off" maxlength="80" required></div>
+                <div class="field full"><label>Their student email <span class="req">*</span> <span class="muted">(their ticket is sent here)</span></label><input type="email" data-f="email" autocomplete="off" maxlength="200" placeholder="${domain ? 'name@' + escapeHtml(domain) : ''}" required></div>
+                <div class="field full"><label>Their student ID number <span class="req">*</span></label><input data-f="student_id" inputmode="numeric" autocomplete="off" maxlength="40" required></div>
+            </div></div>`);
+        document.querySelector(`#guest-${i} [data-f="first"]`).focus();
+        updateGuestButton();
+    }
+    function removeGuest(i) { document.getElementById('guest-' + i)?.remove(); updateGuestButton(); }
+    function updateGuestButton() {
+        const btn = document.getElementById('addGuestBtn');
+        if (btn) {
+            const room = maxPick() - 1 - guestCount();
+            btn.style.display = room > 0 ? '' : 'none';
+            btn.textContent = `+ Add a ticket for another student (${guestCount()} of ${maxPick() - 1})`;
+        }
+        updateSubmitLabel();
+    }
+    function readGuests() {
+        return Array.from(document.querySelectorAll('#guestList .guest')).map(el => {
+            const val = (f) => el.querySelector(`[data-f="${f}"]`)?.value.trim() || '';
+            return { first: val('first'), last: val('last'), email: val('email'), student_id: val('student_id') };
+        });
     }
 
     // Refresh the live numbers without touching anything the person typed
@@ -332,9 +375,7 @@
             document.getElementById('stockLeft').textContent = `${left.toLocaleString()} of ${(info.total || 0).toLocaleString()}`;
             stock.classList.toggle('low', left <= Math.max(5, (info.total || 0) * 0.1));
         }
-        const qty = document.getElementById('cQty');
-        if (qty) qty.innerHTML = qtyOptions(parseInt(qty.value, 10) || 1);
-        updateSubmitLabel();
+        updateGuestButton();
 
         clearInterval(tickTimer);
         const hold = document.getElementById('hold');
@@ -358,18 +399,33 @@
     function updateSubmitLabel() {
         const btn = document.getElementById('submitBtn');
         if (!btn || submitting) return;
-        const n = parseInt(document.getElementById('cQty')?.value, 10) || 1;
+        const n = 1 + guestCount();
         btn.textContent = n > 1 ? `Claim ${n} tickets` : 'Claim ticket';
     }
-    document.addEventListener('change', (e) => { if (e.target.id === 'cQty') updateSubmitLabel(); });
 
-    const ERRORS = {
-        name: 'Please enter your first and last name.',
-        email: 'Please enter a valid student email.',
-        phone: 'Please enter a valid phone number.',
-        student_id: 'Please enter your student ID number.',
-        duplicate: 'Tickets have already been claimed with this student email or student ID. Check your inbox (and spam folder) for your ticket.'
-    };
+    // who: 0 = the person filling out the form, 1+ = the guest in that position
+    function whoLabel(who, guests) {
+        if (!who) return 'your';
+        const g = guests[who - 1];
+        return g && (g.first || g.last) ? `${`${g.first} ${g.last}`.trim()}'s` : `guest ${who}'s`;
+    }
+    function errorText(code, who, guests, res = {}) {
+        const w = whoLabel(who, guests);
+        const W = w.charAt(0).toUpperCase() + w.slice(1);
+        switch (code) {
+            case 'name': return who ? `Please enter a first and last name for each extra ticket.` : 'Please enter your first and last name.';
+            case 'email': return `Please enter ${w} student email.`;
+            case 'domain': return `${W} email must be a student email (ending in @${res.domain || emailDomain()}).`;
+            case 'phone': return 'Please enter a valid phone number.';
+            case 'student_id': return `Please enter ${w} student ID number.`;
+            case 'same_person': return 'Each ticket must be for a different student — two of them have the same email or student ID.';
+            case 'duplicate': return who
+                ? `${W.replace(/'s$/, '')} already has a ticket (that student email or ID was already used). Remove them or enter a different student.`
+                : 'A ticket has already been claimed with your student email or student ID. Check your inbox (and spam folder) for it.';
+            case 'quantity': return `You can claim up to ${res.limit} ticket${res.limit === 1 ? '' : 's'}.`;
+            default: return 'Something went wrong. Please try again.';
+        }
+    }
 
     async function submitClaim(e) {
         e.preventDefault();
@@ -377,15 +433,23 @@
         const err = document.getElementById('formError');
         const btn = document.getElementById('submitBtn');
         const v = (id) => document.getElementById(id)?.value.trim() || '';
-        const form = { first: v('cFirst'), last: v('cLast'), email: v('cEmail'), phone: v('cPhone'), studentId: v('cStudentId'), qty: parseInt(v('cQty'), 10) || 1 };
+        const form = { first: v('cFirst'), last: v('cLast'), email: v('cEmail'), phone: v('cPhone'), studentId: v('cStudentId') };
+        const guests = readGuests();
         err.textContent = '';
 
-        if (!form.first || !form.last) return err.textContent = ERRORS.name;
-        if (!isEmail(form.email)) return err.textContent = ERRORS.email;
+        // Same checks the server makes, so most mistakes are caught before sending
         const domain = emailDomain();
-        if (domain && !form.email.toLowerCase().endsWith('@' + domain)) return err.textContent = `Please use your student email (ending in @${domain}).`;
-        if (form.phone.replace(/\D/g, '').length < 7) return err.textContent = ERRORS.phone;
-        if (!form.studentId) return err.textContent = ERRORS.student_id;
+        const people = [{ first: form.first, last: form.last, email: form.email, student_id: form.studentId }, ...guests];
+        for (let i = 0; i < people.length; i++) {
+            const p = people[i];
+            if (!p.first || !p.last) return err.textContent = errorText('name', i, guests);
+            if (!isEmail(p.email)) return err.textContent = errorText('email', i, guests);
+            if (domain && !p.email.toLowerCase().endsWith('@' + domain)) return err.textContent = errorText('domain', i, guests);
+            if (!p.student_id) return err.textContent = errorText('student_id', i, guests);
+            if (i === 0 && form.phone.replace(/\D/g, '').length < 7) return err.textContent = errorText('phone', 0, guests);
+        }
+        const uniq = (k) => new Set(people.map(p => p[k].toLowerCase())).size === people.length;
+        if (!uniq('email') || !uniq('student_id')) return err.textContent = errorText('same_person', 0, guests);
 
         submitting = true;
         btn.disabled = true; btn.textContent = 'Claiming…';
@@ -393,7 +457,7 @@
         try {
             const { data, error } = await _supabase.rpc('claim_live_tickets', {
                 p_event_id: eventId, p_first: form.first, p_last: form.last, p_email: form.email,
-                p_phone: form.phone, p_student_id: form.studentId, p_quantity: form.qty, p_token: getToken()
+                p_phone: form.phone, p_student_id: form.studentId, p_guests: guests, p_token: getToken()
             });
             if (error) throw error;
             res = data;
@@ -409,7 +473,7 @@
             setToken(null);
             view = 'done';
             clearTimeout(pollTimer); clearInterval(tickTimer);
-            btn.textContent = 'Sending your ticket…';
+            btn.textContent = 'Sending tickets…';
             await finishClaim(form, res.tickets || []);
             submitting = false;
             return;
@@ -427,30 +491,34 @@
         if (code === 'not_enough') {
             info.remaining = res.remaining;
             updateForm();
-            return err.textContent = `Only ${res.remaining} ticket${res.remaining === 1 ? ' is' : 's are'} left. Choose fewer and try again.`;
+            return err.textContent = `Only ${res.remaining} ticket${res.remaining === 1 ? ' is' : 's are'} left. Remove ${1 + guests.length - res.remaining} and try again.`;
         }
-        if (code === 'quantity') return err.textContent = `You can claim up to ${res.limit} ticket${res.limit === 1 ? '' : 's'}.`;
-        if (code === 'domain') return err.textContent = `Please use your student email (ending in @${res.domain}).`;
-        err.textContent = ERRORS[code] || 'Something went wrong. Please try again.';
+        err.textContent = errorText(code, res?.who || 0, guests, res || {});
     }
 
     // ── after a successful claim: email + show the tickets ─────
+    // The claimer gets every ticket in one email; each guest also gets their own.
     async function finishClaim(form, tickets) {
-        const sent = await sendTicketEmail(form, tickets);
-        if (sent) {
-            // Mark them sent so the admin "Email unsent tickets" button skips them
-            await _supabase.from('guests').update({ email_sent: 'Yes' }).in('id', tickets.map(t => t.id)).then(() => {}, () => {});
-        }
+        const [mine, ...guestTickets] = tickets;
+        const claimerSent = await sendTicketEmail({ first: form.first, last: form.last, email: form.email }, tickets, form);
+        const guestSent = await Promise.all(guestTickets.map(t => sendTicketEmail(t, [t], form)));
+        // Mark tickets sent so the admin "Email unsent tickets" button skips them
+        const sentIds = [claimerSent && mine?.id, ...guestTickets.filter((t, i) => guestSent[i]).map(t => t.id)].filter(Boolean);
+        if (sentIds.length) await _supabase.from('guests').update({ email_sent: 'Yes' }).in('id', sentIds).then(() => {}, () => {});
+
         const count = tickets.length;
-        const cards = tickets.map(t => `<div class="ticket">
+        const cards = tickets.map((t, i) => `<div class="ticket">
+            <div class="who">${escapeHtml(`${t.first || ''} ${t.last || ''}`.trim() || 'Your ticket')}</div>
             <div class="n">${count > 1 ? `Ticket ${t.number} of ${count}` : 'Your ticket'}</div>
             <img src="${ticketQrUrl(t.id)}" alt="Ticket QR code">
             <div class="id">ID: #${escapeHtml(String(t.id).substring(0, 8))}</div>
         </div>`).join('');
-        showState('ok', count > 1 ? `You claimed ${count} tickets!` : 'You claimed a ticket!',
-            sent ? `We emailed ${count > 1 ? 'your tickets' : 'your ticket'} to ${form.email}. You can also screenshot ${count > 1 ? 'them' : 'it'} below — show the QR code at check-in.`
-                 : `Your ${count > 1 ? 'tickets are' : 'ticket is'} saved, but we couldn't send the email just now. Screenshot the QR code${count > 1 ? 's' : ''} below — CAB can also resend ${count > 1 ? 'them' : 'it'} to ${form.email}.`,
-            `<div class="tickets">${cards}</div>`);
+        const failedGuests = guestTickets.filter((t, i) => !guestSent[i]).map(t => `${t.first} ${t.last}`);
+        let msg;
+        if (!claimerSent) msg = `Your ${count > 1 ? 'tickets are' : 'ticket is'} saved, but we couldn't send the email just now. Screenshot the QR code${count > 1 ? 's' : ''} below — CAB can also resend ${count > 1 ? 'them' : 'it'}.`;
+        else if (count === 1) msg = `We emailed your ticket to ${form.email}. You can also screenshot it below — show the QR code at check-in.`;
+        else msg = `We emailed all ${count} tickets to ${form.email}, and each student got their own ticket by email.${failedGuests.length ? ` (We couldn't email ${failedGuests.join(', ')} — forward theirs from your email.)` : ''} Each person shows their own QR code at check-in.`;
+        showState('ok', count > 1 ? `You claimed ${count} tickets!` : 'You claimed a ticket!', msg, `<div class="tickets">${cards}</div>`);
     }
 
     let BREVO_API_KEY = '';
@@ -472,7 +540,7 @@
         const blocks = tickets.map(t => `
             <tr><td style="padding:0 15px;"><div style="border-top:2px dashed #e5e7eb;height:1px;"></div></td></tr>
             <tr><td align="center" style="padding:32px 30px;">
-                ${tickets.length > 1 ? `<p style="margin:0 0 14px;font-size:13px;font-weight:700;color:#52525b;text-transform:uppercase;letter-spacing:2px;font-family:sans-serif;">Ticket ${t.number} of ${tickets.length}</p>` : ''}
+                ${tickets.length > 1 ? `<p style="margin:0 0 14px;font-size:13px;font-weight:700;color:#52525b;text-transform:uppercase;letter-spacing:2px;font-family:sans-serif;">${escapeHtml(`${t.first || ''} ${t.last || ''}`.trim())} · Ticket ${t.number} of ${tickets.length}</p>` : ''}
                 <table border="0" cellspacing="0" cellpadding="0" width="100%"><tr><td align="center" style="padding:25px;border-radius:16px;border:2px solid #eeeeee;">
                     <img src="${ticketQrUrl(t.id)}" alt="Ticket QR Code" width="250" height="250" style="display:block;margin:0 auto;border:0;max-width:100%;height:auto;background:#fff;padding:10px;border-radius:8px;">
                 </td></tr></table>
@@ -494,20 +562,24 @@
         </table></td></tr></table></body></html>`;
     }
 
-    async function sendTicketEmail(form, tickets) {
+    // to: { first, last, email } who receives it; claimer: the person who claimed (for a guest's note)
+    async function sendTicketEmail(to, tickets, claimer) {
         try {
-            if (!tickets.length || !(await loadBrevoKey())) return false;
+            if (!tickets.length || !to.email || !(await loadBrevoKey())) return false;
             const count = tickets.length;
-            const body = fillVars(info?.email_body || DEFAULT_EMAIL_BODY, form, count);
+            const isGuest = to.email.toLowerCase() !== claimer.email.toLowerCase();
+            let body = fillVars(info?.email_body || DEFAULT_EMAIL_BODY, to, count);
+            if (isGuest) body = `${claimer.first} ${claimer.last} claimed this ticket for you.\n\n` + body;
+            else if (count > 1) body += `\n\nThis email has all ${count} tickets you claimed. Each student also got their own ticket by email.`;
             const bodyHtml = escapeHtml(body).replace(/\*\*(.*?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>');
-            const text = body.replace(/\*\*(.*?)\*\*/g, '$1') + '\n\n' + tickets.map(t => `Ticket ${t.number}: ${t.id}`).join('\n');
+            const text = body.replace(/\*\*(.*?)\*\*/g, '$1') + '\n\n' + tickets.map(t => `${t.first} ${t.last} — Ticket ID: ${t.id}`).join('\n');
             const res = await fetch("https://api.brevo.com/v3/smtp/email", {
                 method: 'POST',
                 headers: { 'accept': 'application/json', 'api-key': BREVO_API_KEY, 'content-type': 'application/json' },
                 body: JSON.stringify({
                     sender: { name: SENDER_NAME, email: SENDER_EMAIL },
-                    to: [{ email: form.email, name: `${form.first} ${form.last}` }],
-                    subject: fillVars(info?.email_subject || DEFAULT_EMAIL_SUBJECT, form, count),
+                    to: [{ email: to.email, name: `${to.first || ''} ${to.last || ''}`.trim() }],
+                    subject: fillVars(info?.email_subject || DEFAULT_EMAIL_SUBJECT, to, count),
                     htmlContent: ticketEmailHtml(bodyHtml, tickets),
                     textContent: text
                 })
