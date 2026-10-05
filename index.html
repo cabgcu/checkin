@@ -639,9 +639,9 @@
             <div id="customEmailAttachmentList" style="margin-top: 10px;"></div>
         </div>
 
-        <label class="stat-label">5. Select Recipients</label>
+        <label class="stat-label" id="customEmailRecipientsLabel">5. Select Recipients</label>
         <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-bottom:10px;">
-            <select id="customEmailQuickSelect" class="fb-select" onchange="quickSelectCustomEmail(this.value); this.value='';">
+            <select id="customEmailQuickSelect" class="fb-select only-hide" onchange="quickSelectCustomEmail(this.value); this.value='';">
                 <option value="">Quick select…</option>
                 <option value="all">Everyone</option>
                 <option value="vip">VIP guests</option>
@@ -655,7 +655,7 @@
             <button onclick="toggleAllCustomEmailCheckboxes(false)" class="link-btn muted">Deselect All</button>
             <span id="customEmailSelectedCount" style="margin-left:auto; color:var(--text-muted); font-size:0.8rem;"></span>
         </div>
-        <input type="text" id="customEmailSearch" class="modern-input" placeholder="Search guests by name, email or group..." style="margin-bottom:10px;" oninput="filterCustomEmailList()">
+        <input type="text" id="customEmailSearch" class="modern-input only-hide" placeholder="Search guests by name, email or group..." style="margin-bottom:10px;" oninput="filterCustomEmailList()">
         <div id="customEmailList" class="recipient-list" onchange="updateCustomEmailCount()"></div>
 
         <button onclick="executeCustomEmail()" class="btn-action" style="width: 100%; padding: 15px; font-size: 1rem;">Send Custom Email</button>
@@ -1482,7 +1482,7 @@
             <div class="gd-actions">
                 ${isLabel ? '' : `<button type="button" class="btn-action ${isIn ? 'secondary' : ''}" onclick="detailCheckIn()">${isIn ? 'Undo check in' : 'Mark checked in'}</button>`}
                 ${isLabel ? '' : `<button type="button" class="btn-action secondary" onclick="resend('${g.id}')" ${g.email ? '' : 'disabled'}>${g.sent === 'Yes' ? 'Resend' : 'Send'} ticket</button>`}
-                <button type="button" class="btn-action secondary" onclick="closePartyModal(); openCustomEmailModal(['${g.id}'])" ${g.email ? '' : 'disabled'}>Email</button>
+                <button type="button" class="btn-action secondary" onclick="closePartyModal(); openCustomEmailModal(['${g.id}'], true)" ${g.email ? '' : 'disabled'}>Email</button>
                 ${vipFormTypeForTeam(currentParty[0]?.team) ? `<button type="button" class="btn-action secondary" onclick="copyText(vipFormLink(location.href, { event: currentData.activeId, form: vipFormTypeForTeam(currentParty[0].team), edit: '1' }), 'Edit page link copied')" title="Page where the main contact confirms their name and email to edit">Copy edit page link</button>` : ''}
                 <button type="button" class="btn-action secondary" style="color:var(--danger-text);" onclick="deleteFromDetail('${g.id}')">Delete</button>
             </div>
@@ -2251,10 +2251,16 @@
     // --- CUSTOM EMAIL MODAL ---
     let _customEmailAttachments = []; // [{ name, size, content }] picked here, or [{ name, size, url, fromTemplate }]
 
-    function openCustomEmailModal(preselectIds = []) {
-        const guests = currentData.vips.filter(v => v.email)
+    // onlyThese: list just the given guests (e.g. one party) instead of the whole event
+    function openCustomEmailModal(preselectIds = [], onlyThese = false) {
+        const restrict = onlyThese ? new Set(preselectIds || []) : null;
+        const guests = currentData.vips.filter(v => v.email && (!restrict || restrict.has(v.id)))
             .sort((a, b) => `${a.first} ${a.last}`.localeCompare(`${b.first} ${b.last}`));
-        if (guests.length === 0) { showToast("No guests with an email address in this event."); return; }
+        if (guests.length === 0) { showToast(restrict ? "No one here has an email address." : "No guests with an email address in this event."); return; }
+        document.querySelectorAll('#customEmailModal .only-hide').forEach(el => el.style.display = restrict ? 'none' : '');
+        document.getElementById('customEmailRecipientsLabel').textContent = restrict
+            ? (guests.length === 1 ? '5. Recipient' : '5. Recipients · this party')
+            : '5. Select Recipients';
 
         const pre = new Set(preselectIds || []);
         document.getElementById('customEmailList').innerHTML = guests.map(g => {
@@ -2291,7 +2297,7 @@
     function emailCurrentParty() {
         const ids = currentParty.map(p => p.id);
         closePartyModal();
-        openCustomEmailModal(ids);
+        openCustomEmailModal(ids, true);
     }
 
     function applyCustomEmailTemplate(templateId) {
