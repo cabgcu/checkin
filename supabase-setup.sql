@@ -525,10 +525,29 @@ returns boolean language sql stable security definer set search_path = public, e
     )
 $$;
 
-revoke all on function public.verify_admin_password(text) from public;
-grant execute on function public.verify_admin_password(text) to anon, authenticated;
+-- Settings → Event Setup → Change Login Password. Returns false if the
+-- current password is wrong.
+create or replace function public.set_admin_password(current_pass text, new_pass text)
+returns boolean language plpgsql security definer set search_path = public, extensions as $$
+begin
+    if coalesce(new_pass, '') = '' then
+        raise exception 'New password is empty';
+    end if;
+    if not public.verify_admin_password(current_pass) then
+        return false;
+    end if;
+    update public.admin_secret
+       set password_hash = extensions.crypt(new_pass, extensions.gen_salt('bf'))
+     where id = 1;
+    return true;
+end $$;
 
--- Set (or change) the password: uncomment, fill in, and run on its own.
+revoke all on function public.verify_admin_password(text) from public;
+revoke all on function public.set_admin_password(text, text) from public;
+grant execute on function public.verify_admin_password(text) to anon, authenticated;
+grant execute on function public.set_admin_password(text, text) to anon, authenticated;
+
+-- Set the first password (or reset a forgotten one): uncomment, fill in, and run on its own.
 -- Don't save the filled-in version back into this file.
 -- insert into public.admin_secret (id, password_hash)
 -- values (1, extensions.crypt('YOUR PASSWORD', extensions.gen_salt('bf')))
