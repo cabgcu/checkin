@@ -500,3 +500,36 @@ grant execute on function public.live_ticket_status(text, uuid) to anon, authent
 grant execute on function public.claim_live_tickets(text, text, text, text, text, text, jsonb, uuid) to anon, authenticated;
 grant execute on function public.live_ticket_queue_stats(text) to anon, authenticated;
 grant execute on function public.live_ticket_queue_reset(text) to anon, authenticated;
+
+
+-- ── 5. Staff login password ──────────────────────────────────
+-- The password is kept here only as a bcrypt hash, in a table with RLS on
+-- and no policies, so the page's publishable key can't read it. The page
+-- calls verify_admin_password(pass) and gets back true/false.
+
+create extension if not exists pgcrypto with schema extensions;
+
+create table if not exists public.admin_secret (
+    id            int primary key default 1 check (id = 1),
+    password_hash text not null
+);
+
+alter table public.admin_secret enable row level security;
+revoke all on public.admin_secret from anon, authenticated;
+
+create or replace function public.verify_admin_password(pass text)
+returns boolean language sql stable security definer set search_path = public, extensions as $$
+    select exists (
+        select 1 from public.admin_secret
+        where id = 1 and password_hash = extensions.crypt(coalesce(pass, ''), password_hash)
+    )
+$$;
+
+revoke all on function public.verify_admin_password(text) from public;
+grant execute on function public.verify_admin_password(text) to anon, authenticated;
+
+-- Set (or change) the password: uncomment, fill in, and run on its own.
+-- Don't save the filled-in version back into this file.
+-- insert into public.admin_secret (id, password_hash)
+-- values (1, extensions.crypt('YOUR PASSWORD', extensions.gen_salt('bf')))
+-- on conflict (id) do update set password_hash = excluded.password_hash;

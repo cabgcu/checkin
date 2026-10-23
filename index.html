@@ -1050,13 +1050,22 @@
     };
 
     // LOGIN LOGIC
-    const SYSTEM_PASSWORD = "Cabgcu49!";
-
-    function handleLogin() {
+    // The password is checked inside Supabase (verify_admin_password in supabase-setup.sql),
+    // stored there only as a hash, so it never appears in this page.
+    async function handleLogin() {
         const input = document.getElementById('login-password');
         const error = document.getElementById('login-error');
-        
-        if (input.value === SYSTEM_PASSWORD) {
+        if (!input.value) return;
+
+        error.style.display = 'none';
+        const { data, error: rpcError } = await _supabase.rpc('verify_admin_password', { pass: input.value });
+        if (rpcError) {
+            console.error("⚠️ Could not check the password. Run section 5 of supabase-setup.sql.", rpcError);
+            showToast("⚠️ Couldn't check the password — try again");
+            return;
+        }
+
+        if (data === true) {
             rememberLogin(document.getElementById('login-remember').checked);
             unlockApp();
         } else {
