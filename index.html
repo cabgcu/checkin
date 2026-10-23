@@ -898,6 +898,19 @@
                     <button onclick="resetCurrentEventEmailTracking()" class="btn-ghost" style="color:var(--warning-text); border-color:var(--warning-border); background:var(--warning-bg);">Reset Delivery Status</button>
                 </div>
 
+                <div class="setup-card">
+                    <div class="setup-card-body">
+                        <label class="stat-label" style="color:#a78bfa; font-size:0.8rem;">Change Login Password</label>
+                        <p style="color:var(--text-muted); font-size:0.85rem; margin: 0 0 16px;">Changes the password everyone uses to log in to VIP Check In. Devices already signed in stay signed in.</p>
+                        <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                            <input type="password" id="pwCurrent" class="modern-input" placeholder="Current password" autocomplete="current-password" style="flex:1; min-width:180px;">
+                            <input type="password" id="pwNew" class="modern-input" placeholder="New password" autocomplete="new-password" style="flex:1; min-width:180px;">
+                            <input type="password" id="pwConfirm" class="modern-input" placeholder="Confirm new password" autocomplete="new-password" style="flex:1; min-width:180px;">
+                            <button id="pwChangeBtn" onclick="changeLoginPassword()" class="btn-action secondary">Change Password</button>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="danger-zone">
                     <label class="stat-label" style="color: var(--danger-text);">Danger Zone</label>
                     <div style="display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap;">
@@ -1073,6 +1086,31 @@
             input.value = '';
             input.focus();
         }
+    }
+
+    async function changeLoginPassword() {
+        const current = document.getElementById('pwCurrent');
+        const next = document.getElementById('pwNew');
+        const confirmInput = document.getElementById('pwConfirm');
+        if (!current.value || !next.value) return showToast("⚠️ Enter your current and new password");
+        if (next.value !== confirmInput.value) return showToast("⚠️ New passwords don't match");
+
+        const btn = document.getElementById('pwChangeBtn');
+        btn.disabled = true;
+        const { data, error } = await _supabase.rpc('set_admin_password', { current_pass: current.value, new_pass: next.value });
+        btn.disabled = false;
+
+        if (error) {
+            console.error("⚠️ Could not change the password. Run section 5 of supabase-setup.sql.", error);
+            return showToast("⚠️ Couldn't change the password");
+        }
+        if (data !== true) {
+            current.value = '';
+            current.focus();
+            return showToast("⚠️ Current password is incorrect");
+        }
+        current.value = next.value = confirmInput.value = '';
+        showToast("✅ Password changed");
     }
 
     async function unlockApp() {
