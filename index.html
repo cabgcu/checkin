@@ -1457,7 +1457,7 @@
         }
 
         // Shirt size filter options, ordered by size, with counts
-        const sizeOrder = ["Small", "Medium", "Large", "X-Large", "XX-Large", "XXX-Large"];
+        const sizeOrder = VIP_FORM_SHIRT_SIZES;
         const shirtCounts = {};
         let noShirt = 0;
         currentData.vips.forEach(v => {
@@ -1606,11 +1606,12 @@
         const container = document.getElementById('partyContainer');
         if (!container) return;
         let html = '';
-        const shirtOptions = `<option value="">None</option><option value="Medium">Medium</option><option value="Large">Large</option><option value="X-Large">X-Large</option><option value="XX-Large">XX-Large</option><option value="XXX-Large">XXX-Large</option>`;
         currentParty.forEach((member, index) => {
             const isHost = index === 0;
             const sVal = member.shirtSize || "";
-            const sOpts = shirtOptions.replace(`value="${sVal}"`, `value="${sVal}" selected`);
+            // Keep a size that's no longer in the list (Settings → Sign-up Forms → Shirt sizes)
+            const sizes = sVal && !VIP_FORM_SHIRT_SIZES.includes(sVal) ? [...VIP_FORM_SHIRT_SIZES, sVal] : VIP_FORM_SHIRT_SIZES;
+            const sOpts = `<option value="">None</option>` + sizes.map(sz => `<option value="${escapeHtml(sz)}" ${sz === sVal ? 'selected' : ''}>${escapeHtml(sz)}</option>`).join('');
             html += `
             <div class="party-member">
                 <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
@@ -2165,6 +2166,7 @@
             console.error("Failed to load form settings:", e);
             formsStore = {};
         }
+        vipFormsApplyGlobal(formsStore);
     }
 
     async function saveFormsStore() {
@@ -2219,7 +2221,7 @@
             <div class="setup-card">
                 <div class="fc-head">
                     <div>
-                        <h3>${escapeHtml(def.label)}</h3>
+                        <h3>${escapeHtml(def.label)}${def.custom ? ' <span class="status-badge draft" style="vertical-align:middle;">Custom</span>' : ''}</h3>
                         <div class="fc-meta">${formStatusBadge(cfg)}<span>${count} registration${count === 1 ? '' : 's'}</span><span>· up to ${cfg.guestLimit} guest${cfg.guestLimit === 1 ? '' : 's'}</span></div>
                     </div>
                     <div class="seg">${seg}</div>
@@ -2242,8 +2244,10 @@
                         ${cfg.bannerUrl ? `<button class="btn-ghost" style="color:var(--danger-text);" onclick="updateFormConfig('${type}', { bannerUrl: '' }, 'Banner removed')">Remove</button>` : ''}
                         <input class="modern-input" style="flex:1; min-width:200px;" ${f('bannerUrl')} value="${escapeHtml(cfg.bannerUrl)}" placeholder="…or paste an image URL, then Save form">
                     </div>
+                    <label class="stat-label">Form name in Settings <span style="text-transform:none; letter-spacing:0;">(applies to every event)</span></label>
+                    <input class="modern-input" ${f('label')} value="${escapeHtml(def.label)}" style="margin-bottom:16px;" placeholder="${escapeHtml(VIP_FORM_BUILTIN_TYPES[type]?.label || def.team || '')}">
                     <div class="form-grid" style="margin-bottom:16px;">
-                        <div><label class="stat-label">Form title</label><input class="modern-input" ${f('title')} value="${escapeHtml(cfg.title)}"></div>
+                        <div><label class="stat-label">Form title <span style="text-transform:none; letter-spacing:0;">(shown on the sign-up page)</span></label><input class="modern-input" ${f('title')} value="${escapeHtml(cfg.title)}"></div>
                         <div><label class="stat-label">Max guests per registration</label><input type="number" min="0" max="50" class="modern-input" ${f('guestLimit')} value="${cfg.guestLimit}"></div>
                     </div>
                     <label class="stat-label">Intro text</label>
@@ -2259,12 +2263,97 @@
                     <label class="stat-label">Message after someone signs up</label>
                     <textarea class="modern-input" rows="2" ${f('successMessage')} style="margin-bottom:16px; resize:vertical;">${escapeHtml(cfg.successMessage)}</textarea>
                     <div style="display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap;">
-                        <button class="btn-ghost" onclick="resetFormSettings('${type}')">Reset to defaults</button>
+                        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                            <button class="btn-ghost" onclick="resetFormSettings('${type}')">Reset to defaults</button>
+                            ${def.custom ? `<button class="btn-ghost" style="color:var(--danger-text);" onclick="deleteCustomForm('${type}')">Delete form</button>` : ''}
+                        </div>
                         <button class="btn-action" onclick="saveFormSettings('${type}')">Save form</button>
                     </div>
                 </details>
             </div>`;
-        }).join('');
+        }).join('') + formsGlobalCards();
+    }
+
+    // Create-a-form and shirt size cards, below the forms. These settings are shared by every event.
+    function formsGlobalCards() {
+        return `
+            <div class="setup-card">
+                <label class="stat-label" style="color:#a78bfa; font-size:0.8rem;">Create a New Form</label>
+                <p style="color:var(--text-muted); font-size:0.85rem; margin: 0 0 16px;">Adds a sign-up form to every event (closed until you open it). Registrations show up in the guest list under the form's name.</p>
+                <div class="form-grid" style="margin-bottom:12px;">
+                    <div><label class="stat-label">Form name</label><input class="modern-input" id="newFormName" placeholder="e.g. Alumni Early Access" maxlength="60"></div>
+                    <div><label class="stat-label">Max guests per registration</label><input type="number" min="0" max="50" class="modern-input" id="newFormGuests" value="3"></div>
+                </div>
+                <label class="check-row" style="margin-bottom:16px;"><input type="checkbox" id="newFormTicketed" checked> Main contact gets their own ticket (uncheck if they're only registering guests)</label>
+                <div style="display:flex; justify-content:flex-end;"><button class="btn-action" onclick="createCustomForm()">Create form</button></div>
+            </div>
+            <div class="setup-card">
+                <label class="stat-label" style="color:#a78bfa; font-size:0.8rem;">Shirt Sizes</label>
+                <p style="color:var(--text-muted); font-size:0.85rem; margin: 0 0 16px;">The shirt size dropdown on every sign-up form and in the guest editor. One size per line, in the order they should appear. Guests keep sizes they already picked.</p>
+                <textarea class="modern-input" id="shirtSizesInput" rows="${Math.max(4, VIP_FORM_SHIRT_SIZES.length + 1)}" style="margin-bottom:16px; resize:vertical;">${escapeHtml(VIP_FORM_SHIRT_SIZES.join('\n'))}</textarea>
+                <div style="display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+                    <button class="btn-ghost" onclick="resetShirtSizes()">Reset to defaults</button>
+                    <button class="btn-action" onclick="saveShirtSizes()">Save sizes</button>
+                </div>
+            </div>`;
+    }
+
+    function formsGlobal() {
+        if (!formsStore[VIP_FORMS_GLOBAL_KEY]) formsStore[VIP_FORMS_GLOBAL_KEY] = {};
+        const g = formsStore[VIP_FORMS_GLOBAL_KEY];
+        if (!g.forms) g.forms = {};
+        return g;
+    }
+
+    async function saveFormsGlobal(message) {
+        vipFormsApplyGlobal(formsStore);
+        const ok = await saveFormsStore();
+        if (ok) showToast(message);
+        renderFormsTab(true);
+        return ok;
+    }
+
+    // Team values already used by other forms, staff departments or the admin Add screen
+    function teamNameTaken(name) {
+        const n = name.trim().toLowerCase();
+        const builtinTeams = ['Staff Early Access', 'Friends of CAB Early Access', 'VIP Acts', 'Special Events', 'Live Tickets', ...VIP_FORM_STAFF_DEPTS];
+        if (builtinTeams.some(t => t.toLowerCase() === n)) return true;
+        return Object.values(VIP_FORM_TYPES).some(def => def.label.toLowerCase() === n || (def.team || '').toLowerCase() === n);
+    }
+
+    function createCustomForm() {
+        const name = document.getElementById('newFormName').value.trim();
+        if (!name) { showToast('Give the new form a name'); return; }
+        if (/^guest of /i.test(name) || /\[(VIP|Staff|Guest)\]/i.test(name)) { showToast("That name is reserved — try another"); return; }
+        if (teamNameTaken(name)) { showToast('A form or group with that name already exists'); return; }
+        const guestLimit = Math.max(0, Math.min(50, parseInt(document.getElementById('newFormGuests').value, 10) || 0));
+        const ticketedHost = document.getElementById('newFormTicketed').checked;
+        const type = 'c' + Date.now().toString(36);
+        formsGlobal().forms[type] = { custom: true, label: name, team: name, ticketedHost, guestLimit };
+        saveFormsGlobal(`${name} form created`);
+    }
+
+    function deleteCustomForm(type) {
+        const def = VIP_FORM_TYPES[type];
+        if (!def?.custom) return;
+        if (!confirm(`Delete the ${def.label} form from every event? Its link stops working. People who already registered stay in the guest list.`)) return;
+        delete formsGlobal().forms[type];
+        Object.keys(formsStore).forEach(k => { if (k !== VIP_FORMS_GLOBAL_KEY && formsStore[k]) delete formsStore[k][type]; });
+        saveFormsGlobal(`${def.label} form deleted`);
+    }
+
+    function saveShirtSizes() {
+        const seen = new Set();
+        const sizes = document.getElementById('shirtSizesInput').value.split('\n').map(x => x.trim()).filter(x => x && !seen.has(x.toLowerCase()) && seen.add(x.toLowerCase()));
+        if (!sizes.length) { showToast('Add at least one shirt size'); return; }
+        formsGlobal().shirtSizes = sizes;
+        saveFormsGlobal('Shirt sizes saved');
+    }
+
+    function resetShirtSizes() {
+        if (!confirm('Reset the shirt sizes to Small through XXX-Large?')) return;
+        delete formsGlobal().shirtSizes;
+        saveFormsGlobal('Shirt sizes reset');
     }
 
     async function uploadFormBanner(type, file) {
@@ -2314,6 +2403,16 @@
         const el = k => document.getElementById(`fc-${type}-${k}`);
         const title = el('title').value.trim();
         if (!title) { showToast("Form title can't be empty"); return; }
+        const label = el('label').value.trim();
+        if (label !== VIP_FORM_TYPES[type].label) {
+            if (label && Object.entries(VIP_FORM_TYPES).some(([t, d]) => t !== type && d.label.toLowerCase() === label.toLowerCase())) { showToast('Another form already uses that name'); return; }
+            const g = formsGlobal();
+            g.forms[type] = { ...(g.forms[type] || {}) };
+            // Blank resets a built-in form to its original name; custom forms keep their name
+            if (label) g.forms[type].label = label;
+            else if (!VIP_FORM_TYPES[type].custom) delete g.forms[type].label;
+            vipFormsApplyGlobal(formsStore);
+        }
         updateFormConfig(type, {
             title,
             bannerUrl: el('bannerUrl').value.trim(),
@@ -3110,7 +3209,7 @@
     function downloadGuestsCsv() {
         const vips = currentData.vips;
         if (!vips.length) { showToast("No guests to export yet."); return; }
-        const SIZE_ORDER = ["Small", "Medium", "Large", "X-Large", "XX-Large", "XXX-Large"];
+        const SIZE_ORDER = VIP_FORM_SHIRT_SIZES;
         const sizeOf = v => { const sz = (v.shirtSize || '').trim(); return sz && sz !== '-' && sz !== 'N/A' ? sz : ''; };
         const nameOf = v => `${v.first || ''} ${v.last || ''}`.trim();
 

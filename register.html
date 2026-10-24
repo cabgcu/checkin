@@ -155,7 +155,9 @@
         return url;
     }
     function shirtOptions(selected) {
-        return `<option value="">Select size</option>` + VIP_FORM_SHIRT_SIZES.map(s => `<option ${s === selected ? 'selected' : ''}>${s}</option>`).join('');
+        // Keep a size that was removed from the list since this person picked it
+        const sizes = selected && !VIP_FORM_SHIRT_SIZES.includes(selected) ? [...VIP_FORM_SHIRT_SIZES, selected] : VIP_FORM_SHIRT_SIZES;
+        return `<option value="">Select size</option>` + sizes.map(s => `<option value="${escapeHtml(s)}" ${s === selected ? 'selected' : ''}>${escapeHtml(s)}</option>`).join('');
     }
     function bannerSrc() { return processImageUrl((cfg && cfg.bannerUrl) || eventRow?.banner_url || ''); }
     function bannerHtml() {
@@ -170,7 +172,10 @@
 
     async function loadFormsStore() {
         const { data } = await _supabase.from('secrets').select('value').eq('name', VIP_FORMS_KEY).maybeSingle();
-        try { return data?.value ? JSON.parse(data.value) : {}; } catch { return {}; }
+        let store = {};
+        try { store = data?.value ? JSON.parse(data.value) : {}; } catch { store = {}; }
+        vipFormsApplyGlobal(store);   // custom forms, renamed labels and the shirt size list
+        return store;
     }
     async function loadEvent(id) {
         const { data } = await _supabase.from('events').select('*').eq('id', id).maybeSingle();
@@ -629,11 +634,10 @@
         try {
             formType = pageFormType;
             const eventId = params.get('event');
-            if (!eventId || !VIP_FORM_TYPES[formType]) {
-                showState('no', 'Link not valid', 'This registration link is incomplete. Please use the link CAB shared with you.');
-                return;
-            }
+            const invalidLink = () => showState('no', 'Link not valid', 'This registration link is incomplete. Please use the link CAB shared with you.');
+            if (!eventId || !formType) return invalidLink();
             const [ev, store] = await Promise.all([loadEvent(eventId), loadFormsStore()]);
+            if (!Object.prototype.hasOwnProperty.call(VIP_FORM_TYPES, formType)) return invalidLink();
             eventRow = ev;
             if (!eventRow) { showState('no', 'Event not found', 'This event is no longer available.'); return; }
             document.getElementById('eventName').textContent = eventRow.name;
