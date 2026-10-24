@@ -1,19 +1,24 @@
 // Public VIP sign-up forms — shared by index.html (admin) and register.html (public).
 //
 // Form settings live in the `secrets` table as one JSON row:
-//   VIP_FORMS_CONFIG = { [eventId]: { [formType]: { status, opensAt, closesAt, title, intro, ... } } }
+//   VIP_FORMS_CONFIG = { [eventId]: { [formType]: { status, opensAt, closesAt, title, intro, ... } },
+//                        _global: { shirtSizes: [...], forms: { [formType]: { label, ... } } } }
+// `_global` holds settings shared by every event: the shirt size list, renamed form
+// labels, and staff-created forms ({ custom: true, label, team, ticketedHost, guestLimit }).
 // Registrations are written to `guests` with the same team values the admin "Add
 // Registration" screen uses, so the dashboard, ticket templates and check-in treat them
 // exactly like manual entries.
 
 const VIP_FORMS_KEY = 'VIP_FORMS_CONFIG';
+const VIP_FORMS_GLOBAL_KEY = '_global';
 
 const VIP_FORM_STAFF_DEPTS = ["Campus Health", "Campus Recreation", "Club Sports", "Community Standards", "Housing Operations", "Residence Life", "Spiritual Life", "Student Care", "Student Engagement", "Welcome Programs", "Other"];
-const VIP_FORM_SHIRT_SIZES = ["Small", "Medium", "Large", "X-Large", "XX-Large", "XXX-Large"];
+const VIP_FORM_DEFAULT_SHIRT_SIZES = ["Small", "Medium", "Large", "X-Large", "XX-Large", "XXX-Large"];
+const VIP_FORM_SHIRT_SIZES = [...VIP_FORM_DEFAULT_SHIRT_SIZES];   // filled from _global by vipFormsApplyGlobal
 
 // ticketedHost: whether the main contact gets their own ticket. Acts / Special Events
 // contacts are "label only" (email_sent = 'N/A'), matching the admin Add screen.
-const VIP_FORM_TYPES = {
+const VIP_FORM_BUILTIN_TYPES = {
     staff: {
         label: 'Staff Early Access',
         ticketedHost: true,
@@ -55,6 +60,43 @@ const VIP_FORM_TYPES = {
         }
     }
 };
+
+// Built-in forms plus any custom ones, with renamed labels applied. Rebuilt in place by
+// vipFormsApplyGlobal so both pages can keep referring to the same object.
+const VIP_FORM_TYPES = {};
+
+function vipFormsGlobal(store) {
+    return (store && store[VIP_FORMS_GLOBAL_KEY]) || {};
+}
+
+function vipFormsApplyGlobal(store) {
+    const g = vipFormsGlobal(store);
+    Object.keys(VIP_FORM_TYPES).forEach(k => delete VIP_FORM_TYPES[k]);
+    Object.entries(VIP_FORM_BUILTIN_TYPES).forEach(([k, def]) => { VIP_FORM_TYPES[k] = { ...def }; });
+    Object.entries(g.forms || {}).forEach(([k, o]) => {
+        if (!o) return;
+        if (VIP_FORM_TYPES[k]) {
+            if (o.label) VIP_FORM_TYPES[k].label = o.label;
+        } else if (o.custom && o.team) {
+            const label = o.label || o.team;
+            VIP_FORM_TYPES[k] = {
+                label,
+                custom: true,
+                team: o.team,
+                ticketedHost: o.ticketedHost !== false,
+                teamFor: () => o.team,
+                defaults: {
+                    title: label,
+                    intro: 'Sign up below. Each guest gets their own ticket by email before the event.',
+                    guestLimit: Number.isFinite(o.guestLimit) ? o.guestLimit : 3
+                }
+            };
+        }
+    });
+    const sizes = Array.isArray(g.shirtSizes) && g.shirtSizes.length ? g.shirtSizes : VIP_FORM_DEFAULT_SHIRT_SIZES;
+    VIP_FORM_SHIRT_SIZES.splice(0, VIP_FORM_SHIRT_SIZES.length, ...sizes);
+}
+vipFormsApplyGlobal({});
 
 const VIP_FORM_COMMON_DEFAULTS = {
     status: 'closed',          // 'auto' (use opensAt/closesAt) | 'open' | 'closed'
@@ -98,7 +140,8 @@ function vipFormTypeForTeam(team) {
     if (team === 'Special Events') return 'special';
     if (team === 'Friends of CAB Early Access') return 'friends';
     if (team === 'Staff Early Access' || VIP_FORM_STAFF_DEPTS.includes(team)) return 'staff';
-    return null;
+    const custom = Object.entries(VIP_FORM_TYPES).find(([, def]) => def.custom && def.team === team);
+    return custom ? custom[0] : null;
 }
 
 function vipFormLink(base, params) {
