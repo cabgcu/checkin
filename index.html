@@ -838,13 +838,7 @@
             <h2 class="page-title">Add registration</h2>
             <p class="page-sub">Register a VIP, staff member or guest list entry.</p>
             <label class="stat-label">Registration Type</label>
-            <select id="formTypeSelector" class="modern-input" style="margin-bottom:10px;" onchange="renderAddForm(this.value)">
-                <option value="staff">Staff Early Access (Max 3 Guests)</option>
-                <option value="friends">Friends of CAB Early Access (Single Guest)</option>
-                <option value="acts">VIP Acts (Max 10 Guests)</option>
-                <option value="special">VIP Special Events (Max 5 Guests)</option>
-                <option value="single">Single / Manual Add (Flexible)</option>
-            </select>
+            <select id="formTypeSelector" class="modern-input" style="margin-bottom:10px;" onchange="renderAddForm(this.value)"></select>
             <form id="addForm">
                 <div id="dynamicFormContainer"></div>
                 <button type="submit" class="btn-action" style="width:100%; padding:16px; margin-top:20px; font-size:1rem;">Submit Registration</button>
@@ -1127,7 +1121,7 @@
         }
 
         setupUnifiedScanner();
-        renderAddForm('staff');
+        renderAddFormTypes();
         await Promise.all([loadEmailTemplateLibrary(), loadFormsStore()]);
         await refreshData();
         setupRealtime();
@@ -1512,6 +1506,7 @@
         filterTable();
         if (document.getElementById('partyModal').style.display === 'flex') renderGuestDetail();
         if (document.getElementById('settings-tab-forms')?.style.display === 'block') renderFormsTab();
+        else renderAddFormTypes();
         if (document.getElementById('settings-tab-live')?.style.display === 'block') renderLiveTab();
         const unified = document.getElementById('unifiedCheckInInput');
         if (unified && document.getElementById('view-scan').style.display !== 'none') filterUnifiedCheckIn(unified.value);
@@ -2167,6 +2162,7 @@
             formsStore = {};
         }
         vipFormsApplyGlobal(formsStore);
+        renderAddFormTypes();
     }
 
     async function saveFormsStore() {
@@ -2205,6 +2201,7 @@
     }
 
     function renderFormsTab(force = false) {
+        renderAddFormTypes();
         const el = document.getElementById('formsList');
         if (!el) return;
         // Don't wipe a form someone is typing into when realtime data refreshes
@@ -2307,6 +2304,7 @@
 
     async function saveFormsGlobal(message) {
         vipFormsApplyGlobal(formsStore);
+        renderAddFormTypes();
         const ok = await saveFormsStore();
         if (ok) showToast(message);
         renderFormsTab(true);
@@ -2847,13 +2845,48 @@
         refreshData(null, true);
     }
 
+    // Guest limits on the admin Add screen for the built-in forms
+    const ADD_FORM_BUILTIN_LIMITS = { staff: 3, friends: 0, acts: 10, special: 5 };
+
+    function addFormGuestLimit(type) {
+        if (type in ADD_FORM_BUILTIN_LIMITS) return ADD_FORM_BUILTIN_LIMITS[type];
+        const def = VIP_FORM_TYPES[type];
+        if (!def?.custom) return 0;
+        const cfg = vipFormConfig(formsStore, currentData.activeId, type);
+        const n = parseInt(cfg?.guestLimit, 10);
+        return Number.isFinite(n) ? Math.max(0, n) : 0;
+    }
+
+    // Rebuild the Registration Type list from the built-in + custom sign-up forms,
+    // keeping the current choice when it still exists.
+    function renderAddFormTypes() {
+        const sel = document.getElementById('formTypeSelector');
+        if (!sel) return;
+        const prev = sel.value || document.getElementById('dynamicFormContainer')?.dataset.type || 'staff';
+        const limitNote = (type) => {
+            const n = addFormGuestLimit(type);
+            return n > 0 ? ` (Max ${n} Guest${n === 1 ? '' : 's'})` : ' (Single Guest)';
+        };
+        const opts = Object.entries(VIP_FORM_TYPES).map(([type, def]) => `<option value="${type}">${escapeHtml(def.label)}${limitNote(type)}</option>`);
+        opts.push('<option value="single">Single / Manual Add (Flexible)</option>');
+        sel.innerHTML = opts.join('');
+        const next = (prev === 'single' || VIP_FORM_TYPES[prev]) ? prev : 'staff';
+        sel.value = next;
+        const container = document.getElementById('dynamicFormContainer');
+        if (container && (container.dataset.type !== next || String(addFormGuestLimit(next)) !== container.dataset.limit)) renderAddForm(next);
+    }
+
     function renderAddForm(type) {
         const container = document.getElementById('dynamicFormContainer');
         if (!container) return;
         let html = '';
-        let guestLimit = (type === 'staff') ? 3 : (type === 'acts') ? 10 : (type === 'special') ? 5 : 0;
+        let guestLimit = addFormGuestLimit(type);
+        const customDef = VIP_FORM_TYPES[type]?.custom ? VIP_FORM_TYPES[type] : null;
         
-        if (type === 'staff') {
+        if (customDef) {
+            html += `<div class="section-header">${escapeHtml(customDef.label)}${customDef.ticketedHost ? '' : ' — Main Contact (Label Only)'}</div>
+            <div class="form-grid"><div><label class="stat-label">Full Name *</label><input type="text" id="mainName" class="modern-input" required></div><div><label class="stat-label">Email *</label><input type="email" id="mainEmail" class="modern-input" required></div></div>`;
+        } else if (type === 'staff') {
             html += `<div class="section-header">Staff Info</div>
             <div class="form-grid"><div><label class="stat-label">Full Name *</label><input type="text" id="mainName" class="modern-input" required></div><div><label class="stat-label">GCU Email *</label><input type="email" id="mainEmail" class="modern-input" required></div></div>
             <div class="mb-3"><label class="stat-label">Department *</label><select id="mainDept" class="modern-input" required>${STAFF_DEPTS.map(d => `<option>${d}</option>`).join('')}</select></div>`;
@@ -2897,13 +2930,14 @@
             event_id: currentData.activeId, 
             status: 'Invited', 
             // Flag group leaders with 'N/A' so they don't receive emails
-            email_sent: (type === 'acts' || type === 'special') ? 'N/A' : 'No', 
+            email_sent: (VIP_FORM_TYPES[type] && !VIP_FORM_TYPES[type].ticketedHost) ? 'N/A' : 'No', 
             first_name: nameParts[0], 
             last_name: nameParts.slice(1).join(' ') || '',
             email: document.getElementById('mainEmail').value 
         };
         
-        if (type === 'staff') mainPayload.team = document.getElementById('mainDept').value;
+        if (VIP_FORM_TYPES[type]?.custom) mainPayload.team = VIP_FORM_TYPES[type].team;
+        else if (type === 'staff') mainPayload.team = document.getElementById('mainDept').value;
         else if (type === 'friends') {
             mainPayload.team = "Friends of CAB Early Access";
             mainPayload.last_name = document.getElementById('mainLastName').value || mainPayload.last_name;
