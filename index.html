@@ -2859,6 +2859,16 @@
 
     // Rebuild the Registration Type list from the built-in + custom sign-up forms,
     // keeping the current choice when it still exists.
+    // Whether this form's settings (Settings → Sign-up Forms) ask for shirt sizes
+    function addFormAsksShirt(type) {
+        if (!VIP_FORM_TYPES[type]) return false;
+        return !!vipFormConfig(formsStore, currentData.activeId, type)?.askShirt;
+    }
+
+    function addFormShirtSelect(id) {
+        return `<div><label class="stat-label">Shirt Size</label><select id="${id}" class="modern-input"><option value="">—</option>${VIP_FORM_SHIRT_SIZES.map(sz => `<option>${escapeHtml(sz)}</option>`).join('')}</select></div>`;
+    }
+
     function renderAddFormTypes() {
         const sel = document.getElementById('formTypeSelector');
         if (!sel) return;
@@ -2873,7 +2883,8 @@
         const next = (prev === 'single' || VIP_FORM_TYPES[prev]) ? prev : 'staff';
         sel.value = next;
         const container = document.getElementById('dynamicFormContainer');
-        if (container && (container.dataset.type !== next || String(addFormGuestLimit(next)) !== container.dataset.limit)) renderAddForm(next);
+        if (container && (container.dataset.type !== next || String(addFormGuestLimit(next)) !== container.dataset.limit
+            || container.dataset.shirt !== (addFormAsksShirt(next) ? VIP_FORM_SHIRT_SIZES.join('|') : ''))) renderAddForm(next);
     }
 
     function renderAddForm(type) {
@@ -2882,6 +2893,7 @@
         let html = '';
         let guestLimit = addFormGuestLimit(type);
         const customDef = VIP_FORM_TYPES[type]?.custom ? VIP_FORM_TYPES[type] : null;
+        const askShirt = addFormAsksShirt(type);
         
         if (customDef) {
             html += `<div class="section-header">${escapeHtml(customDef.label)}${customDef.ticketedHost ? '' : ' — Main Contact (Label Only)'}</div>
@@ -2908,14 +2920,17 @@
             html += `<div class="section-header">Main Contact (Label Only)</div><div class="form-grid"><div><label class="stat-label">Full Name *</label><input type="text" id="mainName" class="modern-input" required></div><div><label class="stat-label">Email *</label><input type="email" id="mainEmail" class="modern-input" required></div></div>`;
         }
         
+        if (askShirt && VIP_FORM_TYPES[type]?.ticketedHost) html += `<div class="form-grid">${addFormShirtSelect('mainShirt')}</div>`;
+
         if (guestLimit > 0) {
             html += `<div class="section-header">Party Members (Max ${guestLimit})</div>`;
-            for(let i=1; i<=guestLimit; i++) html += `<div class="guest-card"><div class="form-grid"><div><label class="stat-label">Guest ${i} Name</label><input type="text" id="g${i}Name" class="modern-input"></div><div><label class="stat-label">Guest ${i} Email</label><input type="email" id="g${i}Email" class="modern-input"></div></div></div>`;
+            for(let i=1; i<=guestLimit; i++) html += `<div class="guest-card"><div class="form-grid"><div><label class="stat-label">Guest ${i} Name</label><input type="text" id="g${i}Name" class="modern-input"></div><div><label class="stat-label">Guest ${i} Email</label><input type="email" id="g${i}Email" class="modern-input"></div></div>${askShirt ? `<div class="form-grid">${addFormShirtSelect(`g${i}Shirt`)}</div>` : ''}</div>`;
         }
         
         container.innerHTML = html;
         container.dataset.type = type;
         container.dataset.limit = guestLimit;
+        container.dataset.shirt = askShirt ? VIP_FORM_SHIRT_SIZES.join('|') : '';
     }
 
     document.getElementById('addForm').addEventListener('submit', async (e) => {
@@ -2951,6 +2966,9 @@
             mainPayload.team = `${baseTeam} ${tplChoice}`.trim();
         }
         
+        const mainShirt = document.getElementById('mainShirt')?.value;
+        if (mainShirt) mainPayload.shirt_size = mainShirt;
+
         const inserts = [_supabase.from('guests').insert([mainPayload])];
         for(let i=1; i<=limit; i++) {
             const gName = document.getElementById(`g${i}Name`)?.value.trim();
@@ -2959,6 +2977,7 @@
                 inserts.push(_supabase.from('guests').insert([{
                     first_name: gp[0], last_name: gp.slice(1).join(' ') || '',
                     email: document.getElementById(`g${i}Email`)?.value.trim(),
+                    shirt_size: document.getElementById(`g${i}Shirt`)?.value || null,
                     team: `Guest of ${mainPayload.first_name} ${mainPayload.last_name}`,
                     event_id: currentData.activeId, status: 'Invited', email_sent: 'No'
                 }]));
