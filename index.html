@@ -910,6 +910,17 @@
                     </div>
                     <div id="qrStatusText" style="position:absolute;bottom:12px;left:0;right:0;text-align:center;font-size:0.82rem;color:#fff;font-weight:700;text-shadow:0 1px 4px rgba(0,0,0,0.9);">Scanning…</div>
                 </div>
+                <!-- Last scan result: shown here instead of the full-screen pop-up so the camera keeps scanning -->
+                <div id="qrResult" style="display:none; margin-top:10px; padding:14px 16px; border-radius:var(--radius-lg); border:2px solid #34C759; background:var(--inset-bg); text-align:center;">
+                    <div style="display:flex; align-items:center; justify-content:center; gap:8px;">
+                        <span id="qrResultIcon" style="font-size:1.6rem; line-height:1;">✅</span>
+                        <span id="qrResultTitle" style="font-size:1.3rem; font-weight:800; color:#34C759;">CHECKED IN</span>
+                    </div>
+                    <div id="qrResultMsg" style="font-weight:700; margin-top:6px;"></div>
+                    <div id="qrResultName" style="font-size:1.2rem; font-weight:700; margin-top:6px;"></div>
+                    <div id="qrResultGroup" style="font-size:0.8rem; color:var(--text-muted); text-transform:uppercase; letter-spacing:1px; margin-top:2px;"></div>
+                    <div id="qrResultShirt" style="margin-top:8px; font-size:0.85rem; color:#a78bfa; font-weight:700; letter-spacing:1px;">SHIRT SIZE <span id="qrResultShirtSize" style="font-size:2rem; color:var(--text); margin-left:6px; vertical-align:middle;"></span></div>
+                </div>
                 <button onclick="stopCameraScanner()" class="btn-action" style="width:100%;margin-top:10px;padding:12px;background:var(--danger-bg);border:1px solid var(--danger-border);color:var(--danger-text);box-shadow:none;">Stop Camera</button>
             </div>
 
@@ -3761,6 +3772,9 @@
     }
 
     function showScanModal(type, title, message, guest) {
+        // Camera on: show the result under the camera instead of covering it,
+        // so the next ticket can be scanned straight away without closing anything.
+        if (_qrStream) { showCameraScanResult(type, title, message, guest); return; }
         if (closeAnimTimeout) clearTimeout(closeAnimTimeout);
 
         const box = document.getElementById('alertContentBox');
@@ -4121,9 +4135,9 @@
     async function switchEvent(id) { await refreshData(id); }
 
     // ── CAMERA QR SCANNER (mobile) ─────────────────────────────────────
-    // Continuous scanning: the camera stays on between guests. After a read, decoding
-    // pauses while the check-in runs and its pop-up shows; the same ticket is ignored
-    // while it stays in frame so it isn't re-scanned.
+    // Continuous scanning: the camera stays on between guests. Results show in a card
+    // under the camera (no pop-up to close), and decoding only pauses while the
+    // check-in saves. The same ticket is ignored while it stays in frame.
     let _qrStream = null;
     let _qrRaf = null;
     let _qrCooldown = false;
@@ -4158,17 +4172,51 @@
         if (_qrRaf) { cancelAnimationFrame(_qrRaf); _qrRaf = null; }
         if (_qrStream) { _qrStream.getTracks().forEach(t => t.stop()); _qrStream = null; }
         _qrCooldown = false;
+        if (_qrResultTimeout) { clearTimeout(_qrResultTimeout); _qrResultTimeout = null; }
+        document.getElementById('qrResult').style.display = 'none';
         document.getElementById('cameraScannerWrapper').style.display = 'none';
         document.getElementById('startCameraBtn').style.display = '';
+    }
+
+    let _qrResultTimeout = null;
+    const SCAN_COLORS = { success: '#34C759', warning: '#FF9500', error: '#FF3B30' };
+    const SCAN_ICONS = { success: '✅', warning: '⚠️', error: '❌' };
+
+    function showCameraScanResult(type, title, message, guest) {
+        const color = SCAN_COLORS[type] || SCAN_COLORS.success;
+        const box = document.getElementById('qrResult');
+        box.style.borderColor = color;
+        document.getElementById('qrResultIcon').textContent = SCAN_ICONS[type] || '';
+        const titleEl = document.getElementById('qrResultTitle');
+        titleEl.textContent = title;
+        titleEl.style.color = color;
+        const msgEl = document.getElementById('qrResultMsg');
+        msgEl.textContent = message || '';
+        msgEl.style.color = color;
+        msgEl.style.display = message ? 'block' : 'none';
+        const nameEl = document.getElementById('qrResultName');
+        const groupEl = document.getElementById('qrResultGroup');
+        nameEl.textContent = guest ? `${guest.first} ${guest.last}` : '';
+        groupEl.textContent = guest ? cleanTeamName(guest.team) : '';
+        nameEl.style.display = groupEl.style.display = guest ? 'block' : 'none';
+        const showShirt = guest && guest.shirtSize && type === 'success';
+        document.getElementById('qrResultShirt').style.display = showShirt ? 'block' : 'none';
+        if (showShirt) document.getElementById('qrResultShirtSize').textContent = guest.shirtSize;
+        box.style.display = 'block';
+
+        if (navigator.vibrate) navigator.vibrate(type === 'success' ? 80 : [80, 60, 80]);
+
+        // Stays up long enough to read, but scanning continues the whole time
+        if (_qrResultTimeout) clearTimeout(_qrResultTimeout);
+        _qrResultTimeout = setTimeout(() => { box.style.display = 'none'; }, type === 'success' ? 8000 : 10000);
     }
 
     function _scanFrame() {
         if (!_qrStream) return;
         _qrRaf = requestAnimationFrame(_scanFrame);
 
-        const alertEl = document.getElementById('shirtAlert');
         const statusEl = document.getElementById('qrStatusText');
-        if (_qrCooldown || (alertEl && alertEl.style.display === 'flex')) return;
+        if (_qrCooldown) return;
         if (statusEl.textContent !== 'Scanning…') statusEl.textContent = 'Scanning…';
 
         const video = document.getElementById('qrVideo');
