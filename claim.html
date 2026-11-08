@@ -9,6 +9,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="vip-forms.js"></script>
     <style>
         :root {
             --app-bg: #131316; --card-bg: rgba(28, 28, 34, 0.68); --solid-bg: #1c1c22; --inset-bg: rgba(12, 12, 16, 0.45); --highlight-bg: rgba(255, 255, 255, 0.1);
@@ -533,8 +534,22 @@
     }
 
     function fillVars(str, form, count) {
-        return (str || '').replace(/\{\{FIRST\}\}/g, form.first).replace(/\{\{LAST\}\}/g, form.last)
-            .replace(/\{\{EVENT\}\}/g, eventRow?.name || '').replace(/\{\{COUNT\}\}/g, String(count));
+        return vipFillVars(str, { FIRST: form.first || '', LAST: form.last || '', EVENT: eventRow?.name || '', GROUP: 'Live Tickets', COUNT: String(count) });
+    }
+
+    // The template assigned to Live Tickets in Settings → Email Templates (with its attachments).
+    // Its subject and message are also copied into the live ticket settings, which are the fallback.
+    let liveTemplate;
+    async function loadLiveTemplate() {
+        if (liveTemplate !== undefined) return liveTemplate;
+        liveTemplate = null;
+        try {
+            const { data } = await _supabase.from('secrets').select('value').eq('name', VIP_EMAIL_TEMPLATES_KEY).maybeSingle();
+            const lib = data?.value ? JSON.parse(data.value)?.[eventId] : null;
+            const id = lib?.assign?.live;
+            if (id && lib.templates?.[id]) liveTemplate = lib.templates[id];
+        } catch (e) { console.error('Could not load the ticket email template', e); }
+        return liveTemplate;
     }
 
     function ticketEmailHtml(bodyHtml, tickets) {
@@ -571,21 +586,25 @@
             if (!tickets.length || !to.email || !(await loadBrevoKey())) return false;
             const count = tickets.length;
             const isGuest = to.email.toLowerCase() !== claimer.email.toLowerCase();
-            let body = fillVars(info?.email_body || DEFAULT_EMAIL_BODY, to, count);
+            const tpl = await loadLiveTemplate();
+            let body = fillVars(tpl?.body || info?.email_body || DEFAULT_EMAIL_BODY, to, count);
             if (isGuest) body = `${claimer.first} ${claimer.last} claimed this ticket for you.\n\n` + body;
             else if (count > 1) body += `\n\nThis email has all ${count} tickets you claimed. Each student also got their own ticket by email.`;
-            const bodyHtml = escapeHtml(body).replace(/\*\*(.*?)\*\*/g, '<b>$1</b>').replace(/\n/g, '<br>');
-            const text = body.replace(/\*\*(.*?)\*\*/g, '$1') + '\n\n' + tickets.map(t => `${t.first} ${t.last} — Ticket ID: ${t.id}`).join('\n');
+            const bodyHtml = vipEmailBodyHtml(body);
+            const text = vipEmailBodyText(body) + '\n\n' + tickets.map(t => `${t.first} ${t.last} — Ticket ID: ${t.id}`).join('\n');
+            const payload = {
+                sender: { name: SENDER_NAME, email: SENDER_EMAIL },
+                to: [{ email: to.email, name: `${to.first || ''} ${to.last || ''}`.trim() }],
+                subject: fillVars(tpl?.subj || info?.email_subject || DEFAULT_EMAIL_SUBJECT, to, count),
+                htmlContent: ticketEmailHtml(bodyHtml, tickets),
+                textContent: text
+            };
+            const files = (tpl?.attachments || []).filter(a => a && a.url).map(a => ({ name: a.name, url: a.url }));
+            if (files.length) payload.attachment = files;
             const res = await fetch("https://api.brevo.com/v3/smtp/email", {
                 method: 'POST',
                 headers: { 'accept': 'application/json', 'api-key': BREVO_API_KEY, 'content-type': 'application/json' },
-                body: JSON.stringify({
-                    sender: { name: SENDER_NAME, email: SENDER_EMAIL },
-                    to: [{ email: to.email, name: `${to.first || ''} ${to.last || ''}`.trim() }],
-                    subject: fillVars(info?.email_subject || DEFAULT_EMAIL_SUBJECT, to, count),
-                    htmlContent: ticketEmailHtml(bodyHtml, tickets),
-                    textContent: text
-                })
+                body: JSON.stringify(payload)
             });
             return res.ok;
         } catch (e) { console.error('Email failed', e); return false; }
