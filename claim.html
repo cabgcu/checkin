@@ -10,6 +10,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="vip-forms.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
     <style>
         :root {
             --app-bg: #131316; --card-bg: rgba(28, 28, 34, 0.68); --solid-bg: #1c1c22; --inset-bg: rgba(12, 12, 16, 0.45); --highlight-bg: rgba(255, 255, 255, 0.1);
@@ -100,6 +101,11 @@
         .ticket img { width: 190px; height: 190px; display: block; margin: 0 auto; }
         .ticket .n { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #52525b; margin-bottom: 10px; }
         .ticket .id { font: 12px monospace; color: #71717a; margin-top: 8px; }
+        .ticket .save { margin-top: 14px; width: 100%; background: #18181b; color: #fff; }
+        .ticket .save:hover { background: #27272a; }
+        .save-all { margin-top: 18px; }
+        .save-hint { font-size: 12px; color: var(--text-dim); margin-top: 10px; }
+        .again { margin-top: 22px; }
 
         .section-title { font-size: 12px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; margin: 28px 0 12px; }
         .guest { background: var(--inset-bg); border: 1px solid var(--line); border-radius: 18px; padding: 16px; margin-bottom: 12px; }
@@ -143,6 +149,7 @@
     const eventId = params.get('event');
     const app = document.getElementById('app');
     const TOKEN_KEY = 'cabLiveTicketToken:' + eventId;
+    const SAVED_KEY = 'cabLiveTickets:' + eventId;   // tickets claimed on this phone, so a reload still shows them
 
     let eventRow = null;
     let info = null;            // latest live_ticket_status response
@@ -498,29 +505,172 @@
         err.textContent = errorText(code, res?.who || 0, guests, res || {});
     }
 
-    // ── after a successful claim: email + show the tickets ─────
+    // ── after a successful claim: show the tickets, then email them ─────
+    // The tickets show straight away (with a "Save to phone" button) while the emails send.
     // The claimer gets every ticket in one email; each guest also gets their own.
     async function finishClaim(form, tickets) {
         const [mine, ...guestTickets] = tickets;
+        const count = tickets.length;
+        saveTicketsOnDevice(form, tickets);
+        showTickets(count > 1 ? `You claimed ${count} tickets!` : 'You claimed a ticket!',
+            `Sending your ${count > 1 ? 'tickets' : 'ticket'} to ${form.email}…`, tickets);
+
         const claimerSent = await sendTicketEmail({ first: form.first, last: form.last, email: form.email }, tickets, form);
         const guestSent = await Promise.all(guestTickets.map(t => sendTicketEmail(t, [t], form)));
         // Mark tickets sent so the admin "Email unsent tickets" button skips them
         const sentIds = [claimerSent && mine?.id, ...guestTickets.filter((t, i) => guestSent[i]).map(t => t.id)].filter(Boolean);
         if (sentIds.length) await _supabase.from('guests').update({ email_sent: 'Yes' }).in('id', sentIds).then(() => {}, () => {});
 
-        const count = tickets.length;
-        const cards = tickets.map((t, i) => `<div class="ticket">
-            <div class="who">${escapeHtml(`${t.first || ''} ${t.last || ''}`.trim() || 'Your ticket')}</div>
-            <div class="n">${count > 1 ? `Ticket ${t.number} of ${count}` : 'Your ticket'}</div>
-            <img src="${ticketQrUrl(t.id)}" alt="Ticket QR code">
-            <div class="id">ID: #${escapeHtml(String(t.id).substring(0, 8))}</div>
-        </div>`).join('');
         const failedGuests = guestTickets.filter((t, i) => !guestSent[i]).map(t => `${t.first} ${t.last}`);
         let msg;
-        if (!claimerSent) msg = `Your ${count > 1 ? 'tickets are' : 'ticket is'} saved, but we couldn't send the email just now. Screenshot the QR code${count > 1 ? 's' : ''} below — CAB can also resend ${count > 1 ? 'them' : 'it'}.`;
-        else if (count === 1) msg = `We emailed your ticket to ${form.email}. You can also screenshot it below — show the QR code at check-in.`;
-        else msg = `We emailed all ${count} tickets to ${form.email}, and each student got their own ticket by email.${failedGuests.length ? ` (We couldn't email ${failedGuests.join(', ')} — forward theirs from your email.)` : ''} Each person shows their own QR code at check-in.`;
-        showState('ok', count > 1 ? `You claimed ${count} tickets!` : 'You claimed a ticket!', msg, `<div class="tickets">${cards}</div>`);
+        if (!claimerSent) msg = `Your ${count > 1 ? 'tickets are' : 'ticket is'} saved, but we couldn't send the email just now. Save ${count > 1 ? 'them' : 'it'} to your phone below — CAB can also resend ${count > 1 ? 'them' : 'it'}.`;
+        else if (count === 1) msg = `We emailed your ticket to ${form.email}. Save it to your phone below too — show the QR code at check-in.`;
+        else msg = `We emailed all ${count} tickets to ${form.email}, and each student got their own ticket by email.${failedGuests.length ? ` (We couldn't email ${failedGuests.join(', ')} — forward theirs from your email, or save it below and send it to them.)` : ''} Each person shows their own QR code at check-in.`;
+        const p = app.querySelector('.state p');
+        if (p) p.textContent = msg;
+    }
+
+    // ── showing + saving tickets ───────────────────────────────
+    let shownTickets = [];
+    let ticketFiles = [];       // ready-made PNGs, so tapping "Save" shares instantly (phones require it)
+
+    function showTickets(title, msg, tickets, again = false) {
+        view = 'done';
+        clearTimeout(pollTimer); clearInterval(tickTimer);
+        shownTickets = tickets;
+        const count = tickets.length;
+        const cards = tickets.map((t, i) => `<div class="ticket">
+            <div class="who">${escapeHtml(ticketName(t) || 'Your ticket')}</div>
+            <div class="n">${count > 1 ? `Ticket ${t.number || i + 1} of ${count}` : 'Your ticket'}</div>
+            <img src="${qrDataUrl(t.id) || ticketQrUrl(t.id)}" alt="Ticket QR code">
+            <div class="id">ID: #${escapeHtml(String(t.id).substring(0, 8))}</div>
+            <button type="button" class="btn block save" onclick="saveTickets([${i}])">⬇ Save to phone</button>
+        </div>`).join('');
+        const extra = `<div class="tickets">${cards}</div>
+            ${count > 1 ? `<button type="button" class="btn block save-all" onclick="saveTickets(null)">⬇ Save all ${count} tickets</button>` : ''}
+            <div class="save-hint">Saves the ticket as a picture in your photos, so you can show it at the door even without signal.</div>
+            ${again ? `<button type="button" class="btn secondary again" onclick="claimAgain()">Claim a ticket for someone else</button>` : ''}`;
+        showState('ok', title, msg, extra);
+        ticketFiles = [];
+        Promise.all(tickets.map(ticketImageFile)).then(files => { if (shownTickets === tickets) ticketFiles = files; }).catch(e => console.error(e));
+    }
+
+    function ticketName(t) { return `${t.first || ''} ${t.last || ''}`.trim(); }
+
+    function makeQr(data) {
+        if (typeof qrcode === 'undefined') return null;
+        try { const qr = qrcode(0, 'M'); qr.addData(String(data)); qr.make(); return qr; } catch (e) { return null; }
+    }
+    function drawQr(ctx, qr, x, y, size) {
+        const n = qr.getModuleCount(), cell = size / n;
+        ctx.fillStyle = '#000';
+        for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+            if (qr.isDark(r, c)) ctx.fillRect(Math.floor(x + c * cell), Math.floor(y + r * cell), Math.ceil(cell), Math.ceil(cell));
+        }
+    }
+    // QR drawn on this device (works offline); falls back to the online QR image
+    function qrDataUrl(data) {
+        const qr = makeQr(data);
+        if (!qr) return '';
+        const quiet = 4, n = qr.getModuleCount(), px = 8, size = (n + quiet * 2) * px;
+        const c = document.createElement('canvas'); c.width = c.height = size;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, size, size);
+        drawQr(ctx, qr, quiet * px, quiet * px, n * px);
+        return c.toDataURL('image/png');
+    }
+
+    function loadImage(src) {
+        return new Promise((resolve, reject) => {
+            const img = new Image(); img.crossOrigin = 'anonymous';
+            img.onload = () => resolve(img); img.onerror = reject; img.src = src;
+        });
+    }
+    function fitText(ctx, text, maxW, font) {
+        let size = font.size;
+        do { ctx.font = `${font.weight} ${size}px Inter, -apple-system, system-ui, sans-serif`; size -= 2; }
+        while (ctx.measureText(text).width > maxW && size > 20);
+    }
+
+    // A phone-shaped ticket picture: event, name, big QR code, ticket ID
+    async function ticketImageFile(t, i) {
+        const W = 1080, H = 1620, count = shownTickets.length;
+        const c = document.createElement('canvas'); c.width = W; c.height = H;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#131316'; ctx.fillRect(0, 0, W, H);
+        // header
+        const grad = ctx.createLinearGradient(0, 0, W, 0);
+        grad.addColorStop(0, '#7c3aed'); grad.addColorStop(1, '#2563eb');
+        ctx.fillStyle = grad; ctx.fillRect(0, 0, W, 300);
+        ctx.fillStyle = '#fff'; ctx.textAlign = 'center';
+        ctx.font = '600 34px Inter, -apple-system, system-ui, sans-serif';
+        ctx.fillText('CANYON ACTIVITIES BOARD', W / 2, 110);
+        const ev = eventRow?.name || 'Event Ticket';
+        fitText(ctx, ev, W - 120, { weight: 800, size: 72 });
+        ctx.fillText(ev, W / 2, 210);
+        // white ticket body
+        const x = 70, y = 360, w = W - 140, h = H - 440;
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, h, 48) : ctx.rect(x, y, w, h); ctx.fill();
+        ctx.fillStyle = '#18181b';
+        const name = ticketName(t) || 'Your ticket';
+        fitText(ctx, name, w - 100, { weight: 800, size: 64 });
+        ctx.fillText(name, W / 2, y + 110);
+        ctx.fillStyle = '#52525b';
+        ctx.font = '700 32px Inter, -apple-system, system-ui, sans-serif';
+        ctx.fillText((count > 1 ? `TICKET ${t.number || i + 1} OF ${count}` : 'ADMIT ONE'), W / 2, y + 170);
+        const qrSize = 760, qx = (W - qrSize) / 2, qy = y + 220;
+        const qr = makeQr(t.id);
+        if (qr) drawQr(ctx, qr, qx, qy, qrSize);
+        else {
+            try { ctx.drawImage(await loadImage(ticketQrUrl(t.id)), qx, qy, qrSize, qrSize); } catch (e) { /* QR unavailable */ }
+        }
+        ctx.fillStyle = '#18181b';
+        ctx.font = '800 38px Inter, -apple-system, system-ui, sans-serif';
+        ctx.fillText('SHOW THIS QR CODE AT CHECK-IN', W / 2, qy + qrSize + 90);
+        ctx.fillStyle = '#71717a';
+        ctx.font = '30px ui-monospace, Menlo, monospace';
+        ctx.fillText('ID: #' + String(t.id).substring(0, 8), W / 2, qy + qrSize + 150);
+
+        const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+        const slug = (name + ' ' + ev).replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase().slice(0, 60) || 'ticket';
+        return new File([blob], `ticket-${slug}.png`, { type: 'image/png' });
+    }
+
+    // idx: list of ticket positions, or null for all
+    async function saveTickets(idx) {
+        let files = ticketFiles.length === shownTickets.length ? ticketFiles : await Promise.all(shownTickets.map(ticketImageFile));
+        if (idx) files = idx.map(i => files[i]);
+        // Phones: the share sheet offers "Save Image" (iPhone) / save to Photos or Files (Android)
+        if (navigator.canShare && navigator.share && navigator.canShare({ files })) {
+            try { await navigator.share({ files, title: files.length > 1 ? 'Event tickets' : 'Event ticket' }); return; }
+            catch (e) { if (e.name === 'AbortError') return; }
+        }
+        // Computers / older browsers: download the picture(s)
+        files.forEach((f, n) => setTimeout(() => {
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(f); a.download = f.name;
+            document.body.appendChild(a); a.click(); a.remove();
+            setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+        }, n * 400));
+    }
+
+    function saveTicketsOnDevice(form, tickets) {
+        try {
+            const keep = tickets.map(t => ({ id: t.id, first: t.first || '', last: t.last || '', number: t.number }));
+            if (keep[0] && !keep[0].first) { keep[0].first = form.first; keep[0].last = form.last; }
+            localStorage.setItem(SAVED_KEY, JSON.stringify({ email: form.email, tickets: keep }));
+        } catch (e) {}
+    }
+    function savedTickets() {
+        try { const d = JSON.parse(localStorage.getItem(SAVED_KEY)); return d && Array.isArray(d.tickets) && d.tickets.length ? d : null; }
+        catch (e) { return null; }
+    }
+    function claimAgain() {
+        try { localStorage.removeItem(SAVED_KEY); } catch (e) {}
+        view = null; shownTickets = []; ticketFiles = [];
+        app.innerHTML = '<div class="spinner"></div>';
+        poll();
     }
 
     let BREVO_API_KEY = '';
@@ -629,6 +779,13 @@
             eventRow = data;
             if (!eventRow) { showState('no', 'Event not found', 'This event is no longer available.'); return; }
             document.getElementById('eventName').textContent = eventRow.name;
+            // Already claimed on this phone: show those tickets again
+            const saved = savedTickets();
+            if (saved) {
+                const n = saved.tickets.length;
+                showTickets(n > 1 ? 'Your tickets' : 'Your ticket', `Your ${n > 1 ? 'tickets were' : 'ticket was'} also emailed to ${saved.email}. Show the QR code at check-in.`, saved.tickets, true);
+                return;
+            }
         } catch (e) {
             console.error(e);
             showState('no', 'Something went wrong', 'Please refresh the page and try again.');
