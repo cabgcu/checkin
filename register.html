@@ -196,44 +196,41 @@
     }
 
     // ── email ──────────────────────────────────────────────────
-    function emailShell(heading, bodyHtml, buttonUrl, buttonText) {
-        const banner = bannerSrc() ? `<tr><td style="padding:0;"><img src="${escapeHtml(bannerSrc())}" width="500" style="display:block;width:100%;height:auto;border:0;" alt=""></td></tr>` : '';
-        return `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-        <body style="margin:0;padding:0;background:#f3f4f6;font-family:'Segoe UI',Helvetica,Arial,sans-serif;">
-        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f3f4f6;"><tr><td align="center" style="padding:20px;">
-        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:500px;background:#fff;border-radius:16px;overflow:hidden;">
-            ${banner}
-            <tr><td align="center" style="padding:36px 24px 8px;"><h1 style="margin:0;font-size:22px;font-weight:800;color:#000;text-transform:uppercase;letter-spacing:1px;">${escapeHtml(heading)}</h1></td></tr>
-            <tr><td style="padding:16px 30px 8px;font-size:16px;color:#000;line-height:1.6;">${bodyHtml}</td></tr>
-            <tr><td align="center" style="padding:16px 30px 36px;"><a href="${escapeHtml(buttonUrl)}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;font-weight:700;padding:14px 26px;border-radius:9999px;">${escapeHtml(buttonText)}</a></td></tr>
-            <tr><td align="center" style="padding:24px 20px;border-top:1px solid #f0f0f0;font-size:11px;font-weight:700;color:#bbb;text-transform:uppercase;letter-spacing:1px;">&copy; ${new Date().getFullYear()} Canyon Activities Board</td></tr>
-        </table></td></tr></table></body></html>`;
-    }
-
-    async function sendEmail(to, toName, subject, html, text) {
+    // attachments: [{ name, url }] from the assigned template (Brevo fetches each url)
+    async function sendEmail(to, toName, subject, html, text, attachments = []) {
         try {
             if (!(await loadBrevoKey())) return false;
+            const payload = { sender: { name: SENDER_NAME, email: SENDER_EMAIL }, to: [{ email: to, name: toName }], subject, htmlContent: html, textContent: text };
+            const files = (attachments || []).filter(a => a && a.url).map(a => ({ name: a.name, url: a.url }));
+            if (files.length) payload.attachment = files;
             const res = await fetch("https://api.brevo.com/v3/smtp/email", {
                 method: 'POST',
                 headers: { 'accept': 'application/json', 'api-key': BREVO_API_KEY, 'content-type': 'application/json' },
-                body: JSON.stringify({ sender: { name: SENDER_NAME, email: SENDER_EMAIL }, to: [{ email: to, name: toName }], subject, htmlContent: html, textContent: text })
+                body: JSON.stringify(payload)
             });
             return res.ok;
         } catch (e) { console.error('Email failed', e); return false; }
     }
 
-    function sendConfirmation(host, guests) {
+    // The confirmation uses the template assigned to this form in Settings → Email Templates
+    // ("Who gets which email"), or the built-in wording when none is assigned.
+    async function loadConfirmTemplate() {
+        try {
+            const { data } = await _supabase.from('secrets').select('value').eq('name', VIP_EMAIL_TEMPLATES_KEY).maybeSingle();
+            const library = data?.value ? JSON.parse(data.value) : {};
+            const id = vipTemplateAssignment(library, eventRow.id, formType).confirm;
+            return (id && library[eventRow.id]?.templates?.[id]) || null;
+        } catch (e) { console.error('Could not load the confirmation template', e); return null; }
+    }
+
+    async function sendConfirmation(host, guests) {
         const link = editPageUrl(true, { first: host.first_name, last: host.last_name, email: host.email });
-        const list = guests.length
-            ? `<p style="margin:16px 0 6px;"><b>Your guests:</b></p><ul style="margin:0;padding-left:20px;">${guests.map(g => `<li>${escapeHtml(fullName(g))}</li>`).join('')}</ul>`
-            : '';
-        const body = `<p style="margin:0 0 12px;">Hi ${escapeHtml(host.first_name)},</p>
-            <p style="margin:0;">You're registered for <b>${escapeHtml(eventRow.name)}</b> (${escapeHtml(VIP_FORM_TYPES[formType].label)}).${guests.length ? ' Each guest will receive their own ticket by email before the event.' : ' Your ticket will be emailed to you before the event.'}</p>
-            ${list}
-            ${vipFormCanEdit(cfg) ? `<p style="margin:16px 0 0;">Need to change something? Use the button below and confirm your first name, last name and this email address.</p>` : ''}`;
-        return sendEmail(host.email, fullName(host), `You're registered: ${eventRow.name}`,
-            emailShell("You're registered", body, link, vipFormCanEdit(cfg) ? 'Edit your registration' : 'View registration page'),
-            `Hi ${host.first_name},\n\nYou're registered for ${eventRow.name}.\n\nTo make changes, go to ${link} and confirm your name and email.`);
+        const tpl = await loadConfirmTemplate();
+        const email = vipConfirmEmail({
+            eventName: eventRow.name, formLabel: VIP_FORM_TYPES[formType].label, host, guests,
+            canEdit: vipFormCanEdit(cfg), link, bannerUrl: bannerSrc(), tpl
+        });
+        return sendEmail(host.email, fullName(host), email.subject, email.html, email.text, tpl?.attachments);
     }
 
     // ── "Edit your registration": confirm first name, last name and email ──

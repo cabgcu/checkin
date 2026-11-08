@@ -149,3 +149,99 @@ function vipFormLink(base, params) {
     Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
     return url.toString();
 }
+
+// ── Email helpers shared by index.html, register.html and claim.html ─────────
+// Messages are stored as plain text with **bold**, [link text](https://…),
+// [button:Label](https://…) and {{VAR}} tokens.
+const VIP_EMAIL_TEMPLATES_KEY = 'VIP_EMAIL_TEMPLATES_LIBRARY';
+const VIP_EMAIL_URL = String.raw`(?:https?:\/\/|mailto:)[^\s)<>"]+`;
+const VIP_EMAIL_BUTTON_RE = new RegExp(String.raw`\[button:\s*([^\]\n]+)\]\((${VIP_EMAIL_URL})\)`, 'gi');
+const VIP_EMAIL_LINK_RE = new RegExp(String.raw`\[([^\]\n]+)\]\((${VIP_EMAIL_URL})\)`, 'g');
+
+function vipEmailEscape(str) {
+    if (str === null || str === undefined) return '';
+    return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
+function vipEmailButtonHtml(label, url) {
+    return `<a href="${url}" target="_blank" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;font-weight:700;padding:12px 26px;border-radius:9999px;font-family:sans-serif;">${label}</a>`;
+}
+
+// Fill {{VAR}} tokens; vars = { FIRST, LAST, EVENT, GROUP, COUNT, ... }. Unknown tokens are left as typed.
+function vipFillVars(str, vars) {
+    return String(str || '').replace(/\{\{([A-Z_]+)\}\}/g, (m, k) => (vars && vars[k] !== undefined && vars[k] !== null) ? String(vars[k]) : m);
+}
+
+// Stored message -> email HTML (escaped, so names and typed text can't break the layout)
+function vipEmailBodyHtml(text) {
+    let h = vipEmailEscape(text || '');
+    h = h.replace(VIP_EMAIL_BUTTON_RE, (m, label, url) => vipEmailButtonHtml(label.trim(), url));
+    h = h.replace(VIP_EMAIL_LINK_RE, (m, label, url) => `<a href="${url}" target="_blank" style="color:#2563eb;text-decoration:underline;">${label}</a>`);
+    h = h.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+    return h.replace(/\n/g, '<br>');
+}
+
+// Stored message -> plain-text version of the email
+function vipEmailBodyText(text) {
+    return String(text || '')
+        .replace(VIP_EMAIL_BUTTON_RE, (m, label, url) => `${label.trim()}: ${url}`)
+        .replace(VIP_EMAIL_LINK_RE, (m, label, url) => label === url ? url : `${label} (${url})`)
+        .replace(/\*\*(.*?)\*\*/g, '$1');
+}
+
+function vipEmailImageUrl(url) {
+    if (!url) return "";
+    if (url.includes('drive.google.com')) {
+        const m = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+        if (m && m[1]) return `https://lh3.googleusercontent.com/d/${m[1]}`;
+    }
+    return url;
+}
+
+// Who gets which template, per event (stored in the template library):
+//   library[eventId].assign = { forms: { [formType]: { host, guests, confirm } }, live }
+// Blank values mean "use the default".
+function vipTemplateAssignment(library, eventId, formType) {
+    const a = library && library[eventId] && library[eventId].assign;
+    return (a && a.forms && a.forms[formType]) || {};
+}
+
+// Sign-up confirmation email (sent by register.html, previewed in index.html).
+// tpl (optional): { subj, body } from the template library; without it the built-in wording is used.
+function vipConfirmEmail({ eventName, formLabel, host, guests = [], canEdit, link, bannerUrl, tpl }) {
+    const first = host.first_name || '', last = host.last_name || '';
+    const vars = { FIRST: first, LAST: last, EVENT: eventName || '', GROUP: formLabel || '', COUNT: String(guests.length + 1) };
+    const guestNames = guests.map(g => `${g.first_name || ''} ${g.last_name || ''}`.trim());
+    const list = guestNames.length
+        ? `<p style="margin:16px 0 6px;"><b>Your guests:</b></p><ul style="margin:0;padding-left:20px;">${guestNames.map(n => `<li>${vipEmailEscape(n)}</li>`).join('')}</ul>`
+        : '';
+    const editNote = canEdit ? `<p style="margin:16px 0 0;">Need to change something? Use the button below and confirm your first name, last name and this email address.</p>` : '';
+    let subject, bodyHtml, text;
+    if (tpl && (tpl.subj || tpl.body)) {
+        const body = vipFillVars(tpl.body, vars);
+        subject = vipFillVars(tpl.subj, vars) || `You're registered: ${eventName}`;
+        bodyHtml = `<div>${vipEmailBodyHtml(body)}</div>${list}${editNote}`;
+        text = vipEmailBodyText(body);
+    } else {
+        subject = `You're registered: ${eventName}`;
+        bodyHtml = `<p style="margin:0 0 12px;">Hi ${vipEmailEscape(first)},</p>
+            <p style="margin:0;">You're registered for <b>${vipEmailEscape(eventName)}</b> (${vipEmailEscape(formLabel)}).${guests.length ? ' Each guest will receive their own ticket by email before the event.' : ' Your ticket will be emailed to you before the event.'}</p>
+            ${list}${editNote}`;
+        text = `Hi ${first},\n\nYou're registered for ${eventName}.`;
+    }
+    if (guestNames.length) text += `\n\nYour guests:\n${guestNames.map(n => '- ' + n).join('\n')}`;
+    text += `\n\nTo make changes, go to ${link} and confirm your name and email.`;
+    const banner = vipEmailImageUrl(bannerUrl || '');
+    const bannerRow = banner ? `<tr><td style="padding:0;"><img src="${vipEmailEscape(banner)}" width="500" style="display:block;width:100%;height:auto;border:0;" alt=""></td></tr>` : '';
+    const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+        <body style="margin:0;padding:0;background:#f3f4f6;font-family:'Segoe UI',Helvetica,Arial,sans-serif;">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f3f4f6;"><tr><td align="center" style="padding:20px;">
+        <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:500px;background:#fff;border-radius:16px;overflow:hidden;">
+            ${bannerRow}
+            <tr><td align="center" style="padding:36px 24px 8px;"><h1 style="margin:0;font-size:22px;font-weight:800;color:#000;text-transform:uppercase;letter-spacing:1px;">You're registered</h1></td></tr>
+            <tr><td style="padding:16px 30px 8px;font-size:16px;color:#000;line-height:1.6;">${bodyHtml}</td></tr>
+            <tr><td align="center" style="padding:16px 30px 36px;"><a href="${vipEmailEscape(link)}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;font-weight:700;padding:14px 26px;border-radius:9999px;">${canEdit ? 'Edit your registration' : 'View registration page'}</a></td></tr>
+            <tr><td align="center" style="padding:24px 20px;border-top:1px solid #f0f0f0;font-size:11px;font-weight:700;color:#bbb;text-transform:uppercase;letter-spacing:1px;">&copy; ${new Date().getFullYear()} Canyon Activities Board</td></tr>
+        </table></td></tr></table></body></html>`;
+    return { subject, html, text };
+}
