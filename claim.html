@@ -132,8 +132,6 @@
 <script>
     const SUPABASE_URL = 'https://raraxpjsftqxhwkpwpab.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_p4FqN3nJTT5GFNU_xqZtYg_7fPtkKhS';
-    const SENDER_EMAIL = 'noreply@cabgcu.com';
-    const SENDER_NAME = 'Canyon Activities Board';
     const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     const DEFAULT_TITLE = 'Claim your free ticket';
@@ -539,10 +537,15 @@
 
     // The template assigned to Live Tickets in Settings → Email Templates (with its attachments).
     // Its subject and message are also copied into the live ticket settings, which are the fallback.
+    // Also loads the sender / reply-to from Settings → Email Templates → Sender & delivery.
     let liveTemplate;
     async function loadLiveTemplate() {
         if (liveTemplate !== undefined) return liveTemplate;
         liveTemplate = null;
+        try {
+            const { data: f } = await _supabase.from('secrets').select('value').eq('name', VIP_FORMS_KEY).maybeSingle();
+            if (f?.value) vipFormsApplyGlobal(JSON.parse(f.value));
+        } catch (e) { console.error('Could not load the email sender settings', e); }
         try {
             const { data } = await _supabase.from('secrets').select('value').eq('name', VIP_EMAIL_TEMPLATES_KEY).maybeSingle();
             const lib = data?.value ? JSON.parse(data.value)?.[eventId] : null;
@@ -593,7 +596,7 @@
             const bodyHtml = vipEmailBodyHtml(body);
             const text = vipEmailBodyText(body) + '\n\n' + tickets.map(t => `${t.first} ${t.last} — Ticket ID: ${t.id}`).join('\n');
             const payload = {
-                sender: { name: SENDER_NAME, email: SENDER_EMAIL },
+                ...vipBrevoBase('live-ticket'),
                 to: [{ email: to.email, name: `${to.first || ''} ${to.last || ''}`.trim() }],
                 subject: fillVars(tpl?.subj || info?.email_subject || DEFAULT_EMAIL_SUBJECT, to, count),
                 htmlContent: ticketEmailHtml(bodyHtml, tickets),

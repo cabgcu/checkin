@@ -475,6 +475,13 @@
         .ep-test { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; background: var(--card-bg); border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px; }
         .ep-test input { flex: 1; min-width: 200px; }
         .ep-note { font-size: 12px; color: var(--text-dim); margin: 8px 2px 0; }
+        .ep-checks { margin-bottom: 12px; border-radius: 14px; padding: 10px 14px; font-size: 13px; border: 1px solid var(--line); background: var(--inset-bg); }
+        .ep-checks summary { cursor: pointer; font-weight: 600; list-style: none; }
+        .ep-checks summary::-webkit-details-marker { display: none; }
+        .ep-checks ul { margin: 8px 0 2px; padding-left: 18px; color: var(--text-muted); }
+        .ep-checks li { margin: 4px 0; }
+        .ep-checks .ok { color: var(--success-text); }
+        .ep-checks .bad { color: var(--warning-text); }
         @media (max-width: 900px) {
             .assign-row { grid-template-columns: 1fr 1fr; }
             .assign-row .name { grid-column: 1 / -1; }
@@ -761,6 +768,7 @@
             <div><span class="k">Subject</span><span class="v subj" id="epSubject"></span></div>
             <div id="epAttachRow" style="display:none;"><span class="k">Files</span><span class="v" id="epAttach"></span></div>
         </div>
+        <div id="epChecks" class="ep-checks"></div>
         <div class="ep-frame-wrap"><iframe id="epFrame" class="ep-frame" title="Email preview" sandbox="allow-popups allow-popups-to-escape-sandbox"></iframe></div>
         <div class="ep-test">
             <span class="stat-label" style="margin:0;">Send a test to</span>
@@ -1025,6 +1033,23 @@
                 <!-- Who gets which email: per form, live tickets, and the VIP/Staff/Guest fallbacks -->
                 <div id="emailAssignPanel"></div>
 
+                <!-- Sender & delivery: who the email is from and where replies go (every event) -->
+                <details class="assign-card" id="senderCard">
+                    <summary style="cursor:pointer; list-style:none;"><h3 style="display:inline;">Sender &amp; delivery</h3> <span id="senderSummary" style="color:var(--text-muted); font-size:0.85rem; margin-left:6px;"></span></summary>
+                    <p class="sub" style="margin-top:12px;">Used by every email: tickets, confirmations, live tickets and custom emails. The sender address must be a verified sender in Brevo on a domain you've authenticated there (Brevo → Senders, Domains &amp; Dedicated IPs). Otherwise Brevo rejects the email, or GCU's filters send it to Junk.</p>
+                    <div class="form-grid" style="margin-bottom:12px;">
+                        <div><label class="stat-label">Sender name</label><input class="modern-input" id="senderName" placeholder="Canyon Activities Board" maxlength="70"></div>
+                        <div><label class="stat-label">Sender email</label><input class="modern-input" id="senderAddress" placeholder="noreply@cabgcu.com" autocomplete="off"></div>
+                    </div>
+                    <label class="stat-label">Reply-to address <span style="text-transform:none; letter-spacing:0;">(a real inbox someone reads; replies go here)</span></label>
+                    <input class="modern-input" id="senderReplyTo" placeholder="e.g. cab@gcu.edu" autocomplete="off" style="margin-bottom:14px;">
+                    <div style="display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+                        <button class="btn-ghost" onclick="resetSenderSettings()">Reset to defaults</button>
+                        <button class="btn-action" onclick="saveSenderSettings()">Save sender</button>
+                    </div>
+                    <p class="sub" style="margin:12px 0 0;">After saving, open any Preview and send a test to your @gcu.edu address to confirm it reaches the inbox.</p>
+                </details>
+
                 <!-- Banner + heading (this event) -->
                 <div class="setup-card" style="padding: 20px 22px; margin-bottom: 16px;">
                     <div class="form-grid" style="margin-bottom: 0; gap: 14px;">
@@ -1115,8 +1140,6 @@
     
     // API Key will be fetched from Supabase upon login
     let BREVO_API_KEY = '';
-    const SENDER_EMAIL = 'noreply@cabgcu.com';
-    const SENDER_NAME = 'Canyon Activities Board';
 
     const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
     
@@ -2393,6 +2416,50 @@
                 <div class="assign-defaults"><span class="lbl">Defaults — manual adds and anything set to Default:</span>${defaults}</div>
             </div>`;
         populateTargetOptions();
+        renderSenderCard();
+    }
+
+    // --- SENDER & DELIVERY (stored in VIP_FORMS_CONFIG._global.email so the public pages use it too) ---
+    function renderSenderCard() {
+        const set = (id, v) => { const el = document.getElementById(id); if (el && document.activeElement !== el) el.value = v; };
+        const saved = formsGlobal().email || {};
+        set('senderName', saved.name || '');
+        set('senderAddress', saved.address || '');
+        set('senderReplyTo', saved.replyTo || '');
+        const sum = document.getElementById('senderSummary');
+        if (sum) sum.textContent = `${VIP_EMAIL_SENDER.name} <${VIP_EMAIL_SENDER.address}>` + (VIP_EMAIL_SENDER.replyTo ? ` · replies to ${VIP_EMAIL_SENDER.replyTo}` : ' · no reply-to');
+    }
+
+    function saveSenderSettings() {
+        const isEmail = v => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+        const name = document.getElementById('senderName').value.trim();
+        const address = document.getElementById('senderAddress').value.trim().toLowerCase();
+        const replyTo = document.getElementById('senderReplyTo').value.trim();
+        if (address && !isEmail(address)) { showToast("The sender email doesn't look right"); return; }
+        if (replyTo && !isEmail(replyTo)) { showToast("The reply-to address doesn't look right"); return; }
+        if (address && address !== VIP_EMAIL_SENDER.address && !confirm(`Send every email from ${address}?\n\nThis address must already be a verified sender in Brevo, or emails will fail. Send yourself a test from any Preview after saving.`)) return;
+        formsGlobal().email = { name, address, replyTo };
+        saveFormsGlobal('Sender saved').then(renderSenderCard);
+    }
+
+    function resetSenderSettings() {
+        if (!confirm('Go back to "Canyon Activities Board <noreply@cabgcu.com>" with no reply-to address?')) return;
+        delete formsGlobal().email;
+        saveFormsGlobal('Sender reset').then(renderSenderCard);
+    }
+
+    // Preview modal: common things that push school email into Junk
+    function renderInboxChecks(email) {
+        const el = document.getElementById('epChecks');
+        if (!el) return;
+        const checks = vipEmailInboxChecks({ subject: email.subject || '', text: email.text || '', html: email.html || '' });
+        const warns = checks.filter(c => c.level === 'warn').length;
+        const tips = checks.length - warns;
+        el.innerHTML = checks.length ? `
+            <details ${warns ? 'open' : ''}>
+                <summary class="${warns ? 'bad' : 'ok'}">${warns ? `⚠️ Inbox check: ${warns} thing${warns === 1 ? '' : 's'} that can send this to Junk` : '✓ Inbox check: no common spam triggers'}${tips ? ` · ${tips} tip${tips === 1 ? '' : 's'}` : ''}</summary>
+                <ul>${checks.map(c => `<li>${c.level === 'warn' ? '<b>Fix:</b> ' : 'Tip: '}${escapeHtml(c.text)}</li>`).join('')}</ul>
+            </details>` : '<span class="ok">✓ Inbox check: no common spam triggers found</span>';
     }
 
     async function afterAssignmentChange(message) {
@@ -3367,9 +3434,10 @@
     }
 
     // One Brevo send. to: [{ email, name? }]. Returns true, false or 'unauthorized'.
-    async function brevoSend({ to, subject, html, text, attachments }) {
+    // tag shows in Brevo → Transactional → Logs (ticket / update / test).
+    async function brevoSend({ to, subject, html, text, attachments, tag }) {
         if (!BREVO_API_KEY) { console.warn('Brevo API key not loaded'); return 'unauthorized'; }
-        const payload = { sender: { name: SENDER_NAME, email: SENDER_EMAIL }, to, subject, htmlContent: html, textContent: text };
+        const payload = { ...vipBrevoBase(tag), to, subject, htmlContent: html, textContent: text };
         // Template files carry a public url; files picked in Custom Email are inline base64.
         if (attachments && attachments.length) {
             payload.attachment = attachments.map(a => a.url ? { name: a.name, url: a.url } : { name: a.name, content: a.content });
@@ -3406,7 +3474,8 @@
         const email = buildGuestEmail(guest, override || getTemplateForGuest(guest));
         const result = await brevoSend({
             to: [{ email: guest.email, name: `${guest.first || ''} ${guest.last || ''}`.trim() }],
-            subject: email.subject, html: email.html, text: email.text, attachments: email.attachments
+            subject: email.subject, html: email.html, text: email.text, attachments: email.attachments,
+            tag: email.includeTicket ? 'ticket' : 'update'
         });
         // Only mark as sent if the request succeeded and a ticket went out
         if (result === true && email.includeTicket && guest.sent !== 'N/A') {
@@ -3499,7 +3568,8 @@
         const id = document.getElementById('epRecipient').value;
         const guest = (id !== '__sample' && (v.recipients || []).find(g => g.id === id)) || sampleGuest(v.sampleTeam);
         _epEmail = buildPreviewEmail(v, guest);
-        document.getElementById('epFrom').textContent = `${SENDER_NAME} <${SENDER_EMAIL}>`;
+        document.getElementById('epFrom').textContent = `${VIP_EMAIL_SENDER.name} <${VIP_EMAIL_SENDER.address}>${VIP_EMAIL_SENDER.replyTo ? ` · replies go to ${VIP_EMAIL_SENDER.replyTo}` : ''}`;
+        renderInboxChecks(_epEmail);
         document.getElementById('epTo').textContent = `${`${guest.first || ''} ${guest.last || ''}`.trim()} <${guest.email}>`;
         document.getElementById('epSubject').textContent = _epEmail.subject || '(no subject)';
         const files = _epEmail.attachments || [];
@@ -3525,7 +3595,7 @@
         try { localStorage.setItem(TEST_EMAIL_KEY, list.join(', ')); } catch (e) {}
         const btn = document.getElementById('epTestBtn');
         btn.disabled = true; btn.textContent = 'Sending…';
-        const result = await brevoSend({ to: list.map(email => ({ email })), subject: '[TEST] ' + _epEmail.subject, html: _epEmail.html, text: _epEmail.text, attachments: _epEmail.attachments });
+        const result = await brevoSend({ to: list.map(email => ({ email })), subject: '[TEST] ' + _epEmail.subject, html: _epEmail.html, text: _epEmail.text, attachments: _epEmail.attachments, tag: 'test' });
         btn.disabled = false; btn.textContent = 'Send test';
         if (result === 'unauthorized') showToast('⚠️ The email API key is invalid');
         else if (result) showToast(`✉️ Test sent to ${list.join(', ')}`);
@@ -3631,9 +3701,12 @@
         const loaderText = document.querySelector('#loader span');
         loaderText.innerText = `SENDING 0 / ${guests.length}`;
 
-        const BATCH_SIZE = 10;
+        // Small, spaced-out batches: school mail servers (Microsoft 365) treat sudden bursts
+        // from one sender as bulk mail and junk or throttle them.
+        const BATCH_SIZE = 5, PAUSE_MS = 1500;
         for (let i = 0; i < guests.length; i += BATCH_SIZE) {
             if (isUnauthorized) break;
+            if (i > 0) await new Promise(r => setTimeout(r, PAUSE_MS));
             const batch = guests.slice(i, i + BATCH_SIZE);
             const results = await Promise.all(batch.map(g => sendSingleEmail(g, typeof override === 'function' ? override(g) : override)));
             for (const success of results) {

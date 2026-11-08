@@ -125,8 +125,6 @@
 <script>
     const SUPABASE_URL = 'https://raraxpjsftqxhwkpwpab.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_p4FqN3nJTT5GFNU_xqZtYg_7fPtkKhS';
-    const SENDER_EMAIL = 'noreply@cabgcu.com';
-    const SENDER_NAME = 'Canyon Activities Board';
     const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     const params = new URLSearchParams(location.search);
@@ -200,7 +198,8 @@
     async function sendEmail(to, toName, subject, html, text, attachments = []) {
         try {
             if (!(await loadBrevoKey())) return false;
-            const payload = { sender: { name: SENDER_NAME, email: SENDER_EMAIL }, to: [{ email: to, name: toName }], subject, htmlContent: html, textContent: text };
+            // Sender + reply-to come from Settings (applied when loadFormsStore runs)
+            const payload = { ...vipBrevoBase('confirmation'), to: [{ email: to, name: toName }], subject, htmlContent: html, textContent: text };
             const files = (attachments || []).filter(a => a && a.url).map(a => ({ name: a.name, url: a.url }));
             if (files.length) payload.attachment = files;
             const res = await fetch("https://api.brevo.com/v3/smtp/email", {

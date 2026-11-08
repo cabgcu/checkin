@@ -4,7 +4,8 @@
 //   VIP_FORMS_CONFIG = { [eventId]: { [formType]: { status, opensAt, closesAt, title, intro, ... } },
 //                        _global: { shirtSizes: [...], forms: { [formType]: { label, ... } } } }
 // `_global` holds settings shared by every event: the shirt size list, renamed form
-// labels, and staff-created forms ({ custom: true, label, team, ticketedHost, guestLimit }).
+// labels, staff-created forms ({ custom: true, label, team, ticketedHost, guestLimit })
+// and the email sender ({ email: { name, address, replyTo } }, see VIP_EMAIL_SENDER).
 // Registrations are written to `guests` with the same team values the admin "Add
 // Registration" screen uses, so the dashboard, ticket templates and check-in treat them
 // exactly like manual entries.
@@ -95,8 +96,8 @@ function vipFormsApplyGlobal(store) {
     });
     const sizes = Array.isArray(g.shirtSizes) && g.shirtSizes.length ? g.shirtSizes : VIP_FORM_DEFAULT_SHIRT_SIZES;
     VIP_FORM_SHIRT_SIZES.splice(0, VIP_FORM_SHIRT_SIZES.length, ...sizes);
+    vipEmailApplySender(g.email);
 }
-vipFormsApplyGlobal({});
 
 const VIP_FORM_COMMON_DEFAULTS = {
     status: 'closed',          // 'auto' (use opensAt/closesAt) | 'open' | 'closed'
@@ -245,3 +246,56 @@ function vipConfirmEmail({ eventName, formLabel, host, guests = [], canEdit, lin
         </table></td></tr></table></body></html>`;
     return { subject, html, text };
 }
+
+// ── Sender used by every email (Settings → Email Templates → Sender & delivery) ──
+// The address must be a verified sender on a domain authenticated in Brevo (DKIM),
+// or Brevo refuses the send / school mail filters junk it.
+const VIP_EMAIL_DEFAULT_SENDER = { name: 'Canyon Activities Board', address: 'noreply@cabgcu.com', replyTo: '' };
+const VIP_EMAIL_SENDER = { ...VIP_EMAIL_DEFAULT_SENDER };
+
+function vipEmailApplySender(saved) {
+    const o = saved || {};
+    VIP_EMAIL_SENDER.name = (o.name || '').trim() || VIP_EMAIL_DEFAULT_SENDER.name;
+    VIP_EMAIL_SENDER.address = (o.address || '').trim() || VIP_EMAIL_DEFAULT_SENDER.address;
+    VIP_EMAIL_SENDER.replyTo = (o.replyTo || '').trim();
+}
+
+// Common Brevo payload fields: sender, reply-to and a tag (shows in Brevo → Logs, so you
+// can see whether GCU accepted, deferred or blocked each email).
+function vipBrevoBase(tag) {
+    const base = { sender: { name: VIP_EMAIL_SENDER.name, email: VIP_EMAIL_SENDER.address } };
+    if (VIP_EMAIL_SENDER.replyTo) base.replyTo = { email: VIP_EMAIL_SENDER.replyTo, name: VIP_EMAIL_SENDER.name };
+    if (tag) base.tags = [tag];
+    return base;
+}
+
+// Things that commonly push school email (Microsoft 365 / Outlook) into Junk.
+// -> [{ level: 'warn' | 'tip', text }]
+function vipEmailInboxChecks({ subject = '', text = '', html = '' }) {
+    const out = [];
+    const warn = t => out.push({ level: 'warn', text: t });
+    const tip = t => out.push({ level: 'tip', text: t });
+    const emoji = /\p{Extended_Pictographic}/gu;
+    const subjEmoji = (subject.match(emoji) || []).length;
+    const bodyEmoji = (text.match(emoji) || []).length;
+    if (!subject.trim()) warn('The subject line is empty.');
+    if (subjEmoji) warn(`The subject has ${subjEmoji === 1 ? 'an emoji' : subjEmoji + ' emoji'}. Emoji in subject lines are a common spam signal for school filters. Remove ${subjEmoji === 1 ? 'it' : 'them'}.`);
+    if (bodyEmoji > 3) warn(`The message has ${bodyEmoji} emoji. Use 3 or fewer.`);
+    if ((subject.match(/!/g) || []).length > 1) warn('The subject has more than one "!". Use one at most.');
+    const capsWords = (subject.match(/\b[A-Z]{4,}\b/g) || []).filter(w => !['GCU', 'CAB', 'VIP', 'RSVP'].includes(w));
+    if (capsWords.length) warn(`The subject has words in ALL CAPS (${capsWords.slice(0, 3).join(', ')}).`);
+    if (/(!{2,}|\?{2,})/.test(text)) warn('The message has "!!" or "??". Use a single mark.');
+    const words = /\b(free|act now|urgent|winner|congratulations|click here|limited time|guarantee[d]?|100%|\$\$|cash|prize|risk[- ]free)\b/gi;
+    const hits = [...new Set(((subject + ' ' + text).match(words) || []).map(w => w.toLowerCase()))];
+    if (hits.length) tip(`Words that spam filters weigh: "${hits.join('", "')}". They're fine once, but avoid them in the subject.`);
+    if (/\b(bit\.ly|tinyurl\.com|goo\.gl|t\.co|ow\.ly|rb\.gy|cutt\.ly)\//i.test(text + html)) warn('A shortened link (bit.ly etc.) is a strong spam signal. Use the full address.');
+    const links = (html.match(/<a\s[^>]*href=/gi) || []).length;
+    if (links > 5) tip(`There are ${links} links. Fewer links look less like marketing.`);
+    const wordCount = (text.match(/[A-Za-z]{2,}/g) || []).length;
+    if (wordCount < 25) tip('The message is very short. A few sentences of real text (date, time, place) help it read as a personal email.');
+    if (/^noreply@|^no-reply@/i.test(VIP_EMAIL_SENDER.address) && !VIP_EMAIL_SENDER.replyTo) tip('Emails come from a "noreply" address with no reply-to. Add a reply-to address under Sender & delivery so people can answer.');
+    return out;
+}
+
+// Built-in forms, default shirt sizes and sender until a page loads the saved settings
+vipFormsApplyGlobal({});
