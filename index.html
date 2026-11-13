@@ -3043,7 +3043,181 @@
                     <p style="font-size:0.8rem; color:var(--text-muted); margin:0 0 16px;">The QR code for each ticket is added below the message. The email uses this event's banner and ticket heading. Leave any box blank to use the grey example text.</p>`}
                     <div style="display:flex; justify-content:flex-end;"><button class="btn-action" onclick="saveLiveTickets()">Save page &amp; email</button></div>
                 </details>
+            </div>
+
+            <div class="setup-card">
+                <h3 style="margin:0 0 6px; font-size:17px; font-weight:600;">Bulk register from a CSV</h3>
+                <p style="font-size:0.85rem; color:var(--text-muted); margin:0 0 14px;">Give live tickets to a list of people at once. The CSV needs a name (one <b>Name</b> column, or <b>First name</b> and <b>Last name</b>) and an <b>Email</b> column. <b>Student ID</b> is optional, and no phone number is needed. Each person gets their own ticket, shows up in the guest list as "Live Tickets", and counts toward the ticket total.</p>
+                <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                    <input type="file" accept=".csv,text/csv" id="lt-importFile" style="display:none;" onchange="readLiveImportFile(this.files[0]); this.value='';">
+                    <button class="btn-action" onclick="document.getElementById('lt-importFile').click()">Choose CSV file</button>
+                    <button class="btn-action secondary" onclick="downloadLiveImportSample()">Download sample CSV</button>
+                </div>
+                <div id="lt-import">${liveImportHtml()}</div>
             </div>`;
+    }
+
+    // --- BULK REGISTER FROM CSV ---
+    // Rows become live-ticket guests (team "Live Tickets", their own live_claim_id), so they
+    // count toward the ticket total and get the Live Tickets email. No phone number needed.
+    let liveImport = null;   // { fileName, ready: [{first,last,email,studentId}], skipped: [{row,reason}] }
+
+    function parseCsv(text) {
+        const rows = []; let row = [], cell = '', q = false;
+        text = text.replace(/^\uFEFF/, '');
+        const firstLine = text.split(/\r?\n/)[0];
+        const sep = [',', ';', '\t'].reduce((best, d) => firstLine.split(d).length > firstLine.split(best).length ? d : best, ',');
+        for (let i = 0; i < text.length; i++) {
+            const c = text[i];
+            if (q) {
+                if (c === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; }
+                else cell += c;
+            } else if (c === '"') q = true;
+            else if (c === sep) { row.push(cell); cell = ''; }
+            else if (c === '\n' || c === '\r') {
+                if (c === '\r' && text[i + 1] === '\n') i++;
+                row.push(cell); rows.push(row); row = []; cell = '';
+            } else cell += c;
+        }
+        if (cell !== '' || row.length) { row.push(cell); rows.push(row); }
+        return rows.map(r => r.map(c => c.trim())).filter(r => r.some(c => c));
+    }
+
+    function readLiveImportFile(file) {
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+            try { liveImport = { fileName: file.name, ...prepareLiveImport(parseCsv(String(reader.result))) }; }
+            catch (e) { liveImport = { fileName: file.name, error: e.message, ready: [], skipped: [] }; }
+            const el = document.getElementById('lt-import');
+            if (el) el.innerHTML = liveImportHtml();
+        };
+        reader.readAsText(file);
+    }
+
+    function prepareLiveImport(rows) {
+        if (!rows.length) throw new Error('The file is empty.');
+        const norm = h => h.toLowerCase().replace(/[^a-z]/g, '');
+        const head = rows[0].map(norm);
+        const find = names => head.findIndex(h => names.includes(h));
+        let col = {
+            first: find(['first', 'firstname', 'fname', 'givenname', 'preferredname', 'preferredfirstname']),
+            last: find(['last', 'lastname', 'lname', 'surname', 'familyname']),
+            name: find(['name', 'fullname', 'studentname', 'attendee', 'attendeename']),
+            email: head.findIndex(h => h.includes('email')),
+            sid: find(['studentid', 'id', 'sid', 'studentnumber', 'gcuid', 'studentidnumber', 'idnumber'])
+        };
+        let start = 1;
+        if (col.email < 0) {
+            // No header row: guess the columns from the first row (name, email[, student ID] or first, last, email[, ID])
+            const r = rows[0], at = r.findIndex(c => c.includes('@'));
+            if (at < 0) throw new Error('Couldn\'t find an Email column. Add a header row with "Name" (or "First name" and "Last name") and "Email".');
+            start = 0;
+            col = { first: -1, last: -1, name: -1, email: at, sid: r.length > at + 1 ? at + 1 : -1 };
+            if (at >= 2) { col.first = 0; col.last = 1; } else if (at === 1) col.name = 0;
+        }
+        if (col.first < 0 && col.name < 0) throw new Error('Couldn\'t find a name column. Use "Name", or "First name" and "Last name".');
+
+        const taken = new Set();
+        currentData.vips.filter(v => v.liveClaimId).forEach(v => {
+            if (v.email) taken.add('e:' + v.email.trim().toLowerCase());
+            if (v.studentId) taken.add('s:' + String(v.studentId).trim().toLowerCase());
+        });
+        const ready = [], skipped = [];
+        const get = (r, i) => (i >= 0 ? (r[i] || '') : '').trim();
+        for (let i = start; i < rows.length; i++) {
+            const r = rows[i], line = i + 1;
+            let first = get(r, col.first), last = get(r, col.last);
+            if (!first && col.name >= 0) {
+                const full = get(r, col.name);
+                if (full.includes(',')) { [last, first] = full.split(',').map(x => x.trim()); }
+                else { const p = full.split(/\s+/); first = p[0] || ''; last = last || p.slice(1).join(' '); }
+            }
+            const email = get(r, col.email).toLowerCase(), studentId = get(r, col.sid);
+            const label = `${first} ${last}`.trim() || email || `Row ${line}`;
+            if (!first) { skipped.push({ line, label, reason: 'No name' }); continue; }
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { skipped.push({ line, label, reason: email ? 'Invalid email' : 'No email' }); continue; }
+            const keys = ['e:' + email].concat(studentId ? ['s:' + studentId.toLowerCase()] : []);
+            if (keys.some(k => taken.has(k))) { skipped.push({ line, label, reason: 'Already has a live ticket (or listed twice)' }); continue; }
+            keys.forEach(k => taken.add(k));
+            ready.push({ first, last, email, studentId });
+        }
+        return { ready, skipped };
+    }
+
+    function liveImportHtml() {
+        const imp = liveImport;
+        if (!imp) return '';
+        if (imp.error) return `<p style="margin:14px 0 0; color:var(--danger-text); font-size:0.9rem;">⚠️ ${escapeHtml(imp.fileName)}: ${escapeHtml(imp.error)}</p>`;
+        const n = imp.ready.length;
+        const left = Math.max(0, (liveSettings.total_tickets || 0) - liveClaimedCount());
+        const preview = imp.ready.slice(0, 8).map(p => `<tr><td>${escapeHtml(p.first)} ${escapeHtml(p.last)}</td><td>${escapeHtml(p.email)}</td><td>${escapeHtml(p.studentId || '–')}</td></tr>`).join('');
+        const skipped = imp.skipped.length ? `<details style="margin-top:10px; font-size:0.85rem;"><summary style="cursor:pointer; color:var(--warning-text);">${imp.skipped.length} row${imp.skipped.length === 1 ? '' : 's'} will be skipped</summary>
+                <ul style="margin:8px 0 0; padding-left:18px; color:var(--text-muted);">${imp.skipped.map(s => `<li>Row ${s.line} · ${escapeHtml(s.label)}: ${escapeHtml(s.reason)}</li>`).join('')}</ul></details>` : '';
+        return `<div style="margin-top:16px; padding:16px; border:1px solid var(--line); border-radius:16px;">
+                <div style="font-weight:600; margin-bottom:8px;">${escapeHtml(imp.fileName)}: ${n} ${n === 1 ? 'person' : 'people'} ready to register</div>
+                ${n ? `<div style="overflow-x:auto;"><table style="width:100%; font-size:0.85rem; border-collapse:collapse;">
+                    <tr style="color:var(--text-muted); text-align:left;"><th style="padding:4px 8px 4px 0;">Name</th><th style="padding:4px 8px 4px 0;">Email</th><th>Student ID</th></tr>${preview}</table></div>
+                    ${n > 8 ? `<div style="font-size:0.8rem; color:var(--text-muted); margin-top:6px;">…and ${n - 8} more</div>` : ''}` : ''}
+                ${skipped}
+                ${n > left ? `<p style="margin:10px 0 0; color:var(--warning-text); font-size:0.85rem;">⚠️ Only ${left} ticket${left === 1 ? '' : 's'} left of ${liveSettings.total_tickets}. Registering ${n} will go over the total, and the public page will show sold out.</p>` : ''}
+                <label class="check-row" style="margin-top:14px;"><input type="checkbox" id="lt-importSend" checked> Email each person their ticket now</label>
+                <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:12px; flex-wrap:wrap;">
+                    <button class="btn-action secondary" onclick="liveImport = null; document.getElementById('lt-import').innerHTML = '';">Cancel</button>
+                    ${n ? `<button class="btn-action" onclick="runLiveImport()">Register ${n} ${n === 1 ? 'person' : 'people'}</button>` : ''}
+                </div>
+            </div>`;
+    }
+
+    function downloadLiveImportSample() {
+        const csv = 'First name,Last name,Email,Student ID\r\nJane,Doe,jane.doe@my.gcu.edu,20123456\r\nJohn,Smith,john.smith@my.gcu.edu,\r\n';
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+        a.download = 'live-tickets-import-sample.csv';
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    }
+
+    async function runLiveImport() {
+        const imp = liveImport;
+        if (!imp || !imp.ready.length) return;
+        const sendNow = document.getElementById('lt-importSend')?.checked;
+        const left = Math.max(0, (liveSettings.total_tickets || 0) - liveClaimedCount());
+        if (imp.ready.length > left && !confirm(`This registers ${imp.ready.length} people but only ${left} tickets are left. Register them anyway?`)) return;
+        if (sendNow && !BREVO_API_KEY) { alert('The email API key isn\'t loaded, so tickets can\'t be emailed. Uncheck "Email each person their ticket now" to register without emailing.'); return; }
+
+        const eventId = currentData.activeId;
+        const rows = imp.ready.map(p => ({
+            event_id: eventId, first_name: p.first, last_name: p.last, email: p.email,
+            student_id: p.studentId || null, team: 'Live Tickets', status: 'Invited', email_sent: 'No',
+            live_claim_id: crypto.randomUUID()
+        }));
+        document.getElementById('loader').style.display = 'flex';
+        const loaderText = document.querySelector('#loader span');
+        const inserted = [];
+        let failed = 0;
+        for (let i = 0; i < rows.length; i += 200) {
+            loaderText.innerText = `REGISTERING ${i} / ${rows.length}`;
+            const { data, error } = await _supabase.from('guests').insert(rows.slice(i, i + 200)).select();
+            if (error) { console.error('Bulk register failed:', error); failed += Math.min(200, rows.length - i); }
+            else inserted.push(...(data || []));
+        }
+        document.getElementById('loader').style.display = 'none';
+        loaderText.innerText = 'SYNCING';
+        liveImport = null;
+        await refreshData(null, true);
+
+        if (!inserted.length) { alert('Nothing was registered. Check the browser console for the database error.'); renderLiveTab(true); return; }
+        let msg = `Registered ${inserted.length} ${inserted.length === 1 ? 'person' : 'people'}`;
+        if (sendNow) {
+            const ids = new Set(inserted.map(g => String(g.id)));
+            const guests = currentData.vips.filter(v => ids.has(String(v.id)));
+            const result = await sendEmailBatch(guests);
+            await refreshData(null, true);
+            reportBatchResult(result, `${msg} and emailed their tickets`);
+        } else showToast(msg);
+        if (failed) alert(`${inserted.length} registered, but ${failed} couldn't be saved. Check the browser console for the database error.`);
+        renderLiveTab(true);
     }
 
     function setLiveStatus(status) {
