@@ -715,7 +715,7 @@
 
         <label class="stat-label">4. Attachments (optional)</label>
         <div style="margin-bottom: 20px;">
-            <input type="file" id="customEmailAttachmentInput" multiple style="display:none;" onchange="addCustomEmailAttachments(this.files); this.value='';" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.zip">
+            <input type="file" id="customEmailAttachmentInput" multiple style="display:none;" onchange="addCustomEmailAttachments(this.files); this.value='';" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.zip,.mp3,.m4a,.wav">
             <button type="button" class="btn-action secondary" style="padding: 8px 14px;" onclick="document.getElementById('customEmailAttachmentInput').click()">📎 Attach File</button>
             <span style="font-size: 0.8rem; color: var(--text-muted); margin-left: 8px;">Up to 5 MB total</span>
             <div id="customEmailAttachmentList" style="margin-top: 10px;"></div>
@@ -1113,7 +1113,7 @@
 
                 <!-- Template attachments -->
                 <div style="margin-top:14px;">
-                    <input type="file" id="templateAttachmentInput" multiple style="display:none;" onchange="addTemplateAttachments(this.files); this.value='';" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.zip">
+                    <input type="file" id="templateAttachmentInput" multiple style="display:none;" onchange="addTemplateAttachments(this.files); this.value='';" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.ppt,.pptx,.png,.jpg,.jpeg,.gif,.zip,.mp3,.m4a,.wav">
                     <button type="button" class="btn-action secondary" style="padding: 8px 14px;" onclick="document.getElementById('templateAttachmentInput').click()">📎 Attach File to Template</button>
                     <span style="font-size: 0.8rem; color: var(--text-muted); margin-left: 8px;">Sent with every email using this template · up to 5 MB total</span>
                     <div id="templateAttachmentList" style="margin-top: 10px;"></div>
@@ -2136,7 +2136,7 @@
     function renderAttachmentRows(list, removeFnName) {
         return (list || []).map((a, i) => `
             <div class="attach-row">
-                <span>📄 ${a.url ? `<a href="${escapeHtml(a.url)}" target="_blank" rel="noopener" style="color:inherit;">${escapeHtml(a.name)}</a>` : escapeHtml(a.name)} <span style="color:var(--text-muted);">(${formatAttachmentSize(a.size || 0)})</span></span>
+                <span>${/\.(mp3|m4a|wav)$/i.test(a.name || "") ? "🎵" : "📄"} ${a.url ? `<a href="${escapeHtml(a.url)}" target="_blank" rel="noopener" style="color:inherit;">${escapeHtml(a.name)}</a>` : escapeHtml(a.name)} <span style="color:var(--text-muted);">(${formatAttachmentSize(a.size || 0)})</span></span>
                 <button type="button" onclick="${removeFnName}(${i})">Remove</button>
             </div>`).join('');
     }
