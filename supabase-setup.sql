@@ -161,6 +161,8 @@ end $$;
 
 alter table public.guests add column if not exists student_id    text;
 alter table public.guests add column if not exists live_claim_id uuid;
+-- Team name for a VIP party (set on the main contact, shown at check in for the whole party)
+alter table public.guests add column if not exists team_name     text;
 
 create table if not exists public.live_ticket_settings (
     event_id          text primary key,

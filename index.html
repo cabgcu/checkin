@@ -1313,6 +1313,21 @@
         return getTemplateType(teamStr);
     }
 
+    // Team name a VIP party was given (stored on the main contact; guests inherit it)
+    function partyTeamName(guest) {
+        if (!guest) return '';
+        const host = partyHostOf(guest).host;
+        return ((host && host.teamName) || guest.teamName || '').trim();
+    }
+
+    // What to show for someone at check-in / in search: "Team · Group", never "Guest of …"
+    function groupLabel(guest) {
+        if (!guest) return '';
+        const team = partyTeamName(guest);
+        const type = cleanTeamName(getVIPType(guest));
+        return team ? (type && type !== team ? `${team} · ${type}` : team) : type;
+    }
+
     function escapeHtml(str) {
         if (str === null || str === undefined) return '';
         return String(str)
@@ -1482,7 +1497,7 @@
             vips: guestsData.map(g => ({
                 id: g.id, first: g.first_name, last: g.last_name, team: g.team,
                 phone: g.phone, email: g.email, shirtSize: g.shirt_size, status: g.status, sent: g.email_sent,
-                studentId: g.student_id, liveClaimId: g.live_claim_id
+                studentId: g.student_id, liveClaimId: g.live_claim_id, teamName: g.team_name || ''
             })),
             groups: groupsData,
             allEvents: eventsData,
@@ -1598,8 +1613,8 @@
                 const isLabel = v.sent === 'N/A';
                 const isIn = v.status === 'Checked In';
                 const actualType = cleanTeamName(getVIPType(v));
-                const isGuestOf = (v.team || '').startsWith("Guest of ");
-                const sub = isGuestOf ? escapeHtml(v.team) : '';
+                const teamName = partyTeamName(v);
+                const sub = teamName ? escapeHtml(teamName) : '';
                 const ticket = isLabel
                     ? `<span class="status-badge na">Main Contact</span>`
                     : `<span class="status-badge ${v.sent === 'Yes' ? 'sent' : 'draft'}">${v.sent === 'Yes' ? 'Sent' : 'Unsent'}</span>`;
@@ -1608,7 +1623,7 @@
                     : `<button onclick="event.stopPropagation(); checkIn('${v.id}')" class="btn-action btn-checkin ${isIn ? 'in' : ''}">${isIn ? '✓ Arrived' : 'Mark In'}</button>`;
 
                 return `
-                <tr class="guest-row ${isLabel ? 'label-row' : ''}" onclick="openPartyModal('${v.id}')" data-type="${escapeHtml(actualType)}" data-sent="${escapeHtml(v.sent)}" data-in="${isIn ? 1 : 0}" data-shirt="${escapeHtml((v.shirtSize || '').trim() === '-' ? '' : (v.shirtSize || '').trim())}" data-search="${escapeHtml(`${v.first} ${v.last} ${v.email || ''} ${v.phone || ''} ${v.studentId || ''} ${actualType} ${v.team || ''}`.toUpperCase())}">
+                <tr class="guest-row ${isLabel ? 'label-row' : ''}" onclick="openPartyModal('${v.id}')" data-type="${escapeHtml(actualType)}" data-sent="${escapeHtml(v.sent)}" data-in="${isIn ? 1 : 0}" data-shirt="${escapeHtml((v.shirtSize || '').trim() === '-' ? '' : (v.shirtSize || '').trim())}" data-search="${escapeHtml(`${v.first} ${v.last} ${v.email || ''} ${v.phone || ''} ${v.studentId || ''} ${actualType} ${teamName} ${v.team || ''}`.toUpperCase())}">
                     <td class="c-name"><div class="name-cell"><span class="avatar" style="background:${avatarColor(v.first + v.last)}">${escapeHtml(((v.first || '?')[0] + (v.last || '')[0] || '').toUpperCase())}</span><div><div class="guest-name">${escapeHtml(v.first)} ${escapeHtml(v.last)}</div>${sub ? `<div class="group-sub">${sub}</div>` : ''}</div></div></td>
                     <td class="c-type"><span class="group-tag">${escapeHtml(actualType)}</span><span class="m-ticket">${ticket}</span></td>
                     <td class="c-ticket">${ticket}</td>
@@ -1690,7 +1705,8 @@
                     ${row('phone', 'Phone', g.phone, g.phone ? `<a href="tel:${escapeHtml(g.phone)}">${escapeHtml(g.phone)}</a>` : '')}
                     ${g.studentId ? row('ticket', 'Student ID', g.studentId) : ''}
                     ${row('shirt', 'Shirt size', shirt)}
-                    ${row('group', 'Group', g.team)}
+                    ${partyTeamName(g) ? row('group', 'Team', partyTeamName(g)) : ''}
+                    ${row('group', 'Group', type)}
                     ${isLabel ? '' : row('ticket', 'Ticket ID', '#' + String(g.id).substring(0, 8), `<span style="font-family:monospace;">#${escapeHtml(String(g.id).substring(0, 8))}</span>`)}
                 </div>
             </div>
@@ -1729,12 +1745,13 @@
                     <span class="stat-label" style="color:${isHost ? '#a78bfa' : '#fff'}">${isHost ? 'Main contact' : 'Guest ' + index}</span>
                     ${!isHost ? `<button type="button" onclick="removePartyMember('${member.id}')" style="color:var(--danger-text); background:none; border:none; cursor:pointer; font: 500 13px var(--font-stack);">Remove</button>` : ''}
                 </div>
+                ${isHost ? `<div style="margin-bottom:10px;"><label class="stat-label">Team name</label><input type="text" value="${escapeHtml(member.teamName || '')}" class="modern-input" oninput="updatePartyMember('${member.id}', 'team_name', this.value)" placeholder="e.g. The Night Owls — shown for everyone in this party at check in"></div>` : ''}
                 <div class="form-grid" style="margin-bottom:10px;">
                     <div><label class="stat-label">First Name</label><input type="text" value="${member.first}" class="modern-input" oninput="updatePartyMember('${member.id}', 'first_name', this.value)"></div>
                     <div><label class="stat-label">Last Name</label><input type="text" value="${member.last}" class="modern-input" oninput="updatePartyMember('${member.id}', 'last_name', this.value)"></div>
                 </div>
                 <div class="form-grid" style="margin-bottom:10px;">
-                    <div><label class="stat-label">Group / Team</label><input type="text" value="${member.team}" class="modern-input" oninput="updatePartyMember('${member.id}', 'team', this.value)"></div>
+                    <div><label class="stat-label">${isHost ? 'Group / Category' : 'Linked to'}</label><input type="text" value="${escapeHtml(member.team || '')}" class="modern-input" oninput="updatePartyMember('${member.id}', 'team', this.value)"></div>
                     <div><label class="stat-label">Email</label><input type="text" value="${member.email || ''}" class="modern-input" oninput="updatePartyMember('${member.id}', 'email', this.value)" placeholder="New email invalidates old ticket"></div>
                 </div>
                 <div class="form-grid" style="margin-bottom:0;">
@@ -1771,6 +1788,7 @@
                     email: fields.email, // newly assigned email
                     phone: fields.phone !== undefined ? fields.phone : originalGuest.phone,
                     shirt_size: fields.shirt_size !== undefined ? fields.shirt_size : originalGuest.shirtSize,
+                    ...((fields.team_name !== undefined ? fields.team_name : originalGuest.teamName) ? { team_name: (fields.team_name !== undefined ? fields.team_name : originalGuest.teamName).trim() } : {}),
                     status: originalGuest.status,
                     email_sent: 'No', // Automatically flag as unsent
                     event_id: currentData.activeId
@@ -1788,11 +1806,16 @@
                 updatePromises.push(promise);
             } else {
                 // Otherwise run a standard update
+                if (fields.team_name !== undefined) fields.team_name = fields.team_name.trim() || null;
                 updatePromises.push(_supabase.from('guests').update(fields).eq('id', id));
             }
         }
         
-        await Promise.all(updatePromises);
+        const results = await Promise.all(updatePromises);
+        if (results.some(r => r && r.error && /team_name/.test(r.error.message || ''))) {
+            alert("Couldn't save the team name: the database is missing the team_name column.\n\nRun supabase-setup.sql in Supabase → SQL Editor, then try again.");
+            return;
+        }
         pendingEdits = {}; 
         closePartyModal();
         showToast("Updated!");
@@ -3314,11 +3337,11 @@
         document.getElementById('customEmailList').innerHTML = guests.map(g => {
             const type = cleanTeamName(getVIPType(g));
             const tag = g.sent === 'N/A' ? 'Main Contact' : (g.status === 'Checked In' ? 'Checked In' : (g.sent === 'Yes' ? 'Ticket Sent' : 'Unsent'));
-            const searchKey = `${g.first || ''} ${g.last || ''} ${g.email || ''} ${type} ${g.team || ''}`.toLowerCase();
+            const searchKey = `${g.first || ''} ${g.last || ''} ${g.email || ''} ${type} ${partyTeamName(g)} ${g.team || ''}`.toLowerCase();
             return `
             <div class="recipient-item" data-name="${escapeHtml(searchKey)}">
                 <input type="checkbox" id="chkce-${g.id}" class="custom-email-checkbox" value="${g.id}" ${pre.has(g.id) ? 'checked' : ''}>
-                <label for="chkce-${g.id}"><strong>${escapeHtml(g.first)} ${escapeHtml(g.last)}</strong> <span style="color:var(--text-muted); font-size:0.8rem;">— ${escapeHtml(type)} · ${tag}</span></label>
+                <label for="chkce-${g.id}"><strong>${escapeHtml(g.first)} ${escapeHtml(g.last)}</strong> <span style="color:var(--text-muted); font-size:0.8rem;">— ${escapeHtml(groupLabel(g))} · ${tag}</span></label>
             </div>`;
         }).join('');
 
@@ -3527,6 +3550,7 @@
             html += `<div class="section-header">Main Contact (Label Only)</div><div class="form-grid"><div><label class="stat-label">Full Name *</label><input type="text" id="mainName" class="modern-input" required></div><div><label class="stat-label">Email *</label><input type="email" id="mainEmail" class="modern-input" required></div></div>`;
         }
         
+        html += `<div class="mb-3"><label class="stat-label">Team name</label><input type="text" id="mainTeamName" class="modern-input" placeholder="Optional — e.g. The Night Owls. Shown for the whole party at check in"></div>`;
         if (askShirt && VIP_FORM_TYPES[type]?.ticketedHost) html += `<div class="form-grid">${addFormShirtSelect('mainShirt')}</div>`;
 
         if (guestLimit > 0) {
@@ -3575,8 +3599,17 @@
         
         const mainShirt = document.getElementById('mainShirt')?.value;
         if (mainShirt) mainPayload.shirt_size = mainShirt;
+        const mainTeamName = document.getElementById('mainTeamName')?.value.trim();
+        if (mainTeamName) mainPayload.team_name = mainTeamName;
 
-        const inserts = [_supabase.from('guests').insert([mainPayload])];
+        const { error: mainErr } = await _supabase.from('guests').insert([mainPayload]);
+        if (mainErr) {
+            console.error(mainErr);
+            if (/team_name/.test(mainErr.message || '')) alert("Couldn't save the team name: the database is missing the team_name column.\n\nRun supabase-setup.sql in Supabase → SQL Editor, then try again.");
+            else showToast("⚠️ Couldn't add registration");
+            return;
+        }
+        const inserts = [];
         for(let i=1; i<=limit; i++) {
             const gName = document.getElementById(`g${i}Name`)?.value.trim();
             if (gName) {
@@ -3970,7 +4003,7 @@
         
         if (guest) {
             nameEl.innerText = `${guest.first} ${guest.last}`;
-            groupEl.innerText = cleanTeamName(guest.team); // Keeps original group text for the scanner
+            groupEl.innerText = groupLabel(guest);
             document.getElementById('alertShirtSize').innerText = guest.shirtSize || 'N/A';
         }
 
@@ -4101,11 +4134,11 @@
             (b.isHost - a.isHost) ||
             nameOf(a.v).localeCompare(nameOf(b.v)));
 
-        const header = ['VIP Type', 'Party (Main Contact)', 'Role', 'First Name', 'Last Name', 'Email', 'Phone', 'Student ID', 'Shirt Size', 'Group / Department', 'Ticket', 'Checked In', 'Ticket ID'];
+        const header = ['VIP Type', 'Team', 'Party (Main Contact)', 'Role', 'First Name', 'Last Name', 'Email', 'Phone', 'Student ID', 'Shirt Size', 'Group / Department', 'Ticket', 'Checked In', 'Ticket ID'];
         const lines = [header];
         rows.forEach(({ type, party, isHost, v }) => {
             lines.push([
-                type, party, isHost ? 'Main contact' : 'Guest',
+                type, partyTeamName(v), party, isHost ? 'Main contact' : 'Guest',
                 v.first || '', v.last || '', v.email || '', v.phone || '', v.studentId || '', sizeOf(v),
                 v.team || '',
                 v.sent === 'N/A' ? 'Label only' : (v.sent === 'Yes' ? 'Sent' : 'Unsent'),
@@ -4223,7 +4256,7 @@
             return;
         }
         const matched = currentData.vips.filter(v => v.sent !== 'N/A' &&
-            `${v.first || ''} ${v.last || ''} ${v.email || ''}`.toUpperCase().includes(val));
+            `${v.first || ''} ${v.last || ''} ${v.email || ''} ${partyTeamName(v)}`.toUpperCase().includes(val));
         if (matched.length === 0) {
             res.innerHTML = '<div style="color:var(--text-muted); text-align:center; padding: 20px;">No guests found matching that search.</div>';
             return;
@@ -4232,7 +4265,7 @@
             const isIn = v.status === 'Checked In';
             const shirt = v.shirtSize && v.shirtSize !== '-' ? ` · <span class="shirt-tag">👕 ${escapeHtml(v.shirtSize)}</span>` : '';
             return `<div class="manual-result-item">
-                <div><strong>${escapeHtml(v.first)} ${escapeHtml(v.last)}</strong><br><small style="color:var(--text-muted);">${escapeHtml(cleanTeamName(getVIPType(v)))}${shirt}</small></div>
+                <div><strong>${escapeHtml(v.first)} ${escapeHtml(v.last)}</strong><br><small style="color:var(--text-muted);">${escapeHtml(groupLabel(v))}${shirt}</small></div>
                 <button class="btn-action btn-checkin ${isIn ? 'in' : ''}" onclick="checkIn('${v.id}', false, this)">${isIn ? '✓ In' : 'Mark In'}</button>
             </div>`;
         }).join('');
@@ -4371,7 +4404,7 @@
         const nameEl = document.getElementById('qrResultName');
         const groupEl = document.getElementById('qrResultGroup');
         nameEl.textContent = guest ? `${guest.first} ${guest.last}` : '';
-        groupEl.textContent = guest ? cleanTeamName(guest.team) : '';
+        groupEl.textContent = guest ? groupLabel(guest) : '';
         nameEl.style.display = groupEl.style.display = guest ? 'block' : 'none';
         const showShirt = guest && guest.shirtSize && type === 'success';
         document.getElementById('qrResultShirt').style.display = showShirt ? 'block' : 'none';
