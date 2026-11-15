@@ -434,15 +434,18 @@
         .var-chip:hover { background: rgba(139, 92, 246, 0.22); }
 
         .email-canvas { background: #f3f4f6; border-radius: var(--radius-xl); padding: 20px 20px 30px; overflow-y: auto; }
-        .email-sheet { max-width: 500px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 2px 12px rgba(0,0,0,0.08); font-family: 'Segoe UI', Helvetica, Arial, sans-serif; color: #000; }
-        .email-sheet h1 { margin: 0; font-size: 22px; font-weight: 800; text-transform: uppercase; color: #000; letter-spacing: 1px; }
-        .email-badge { margin: 12px 0 0 0; font-size: 11px; font-weight: 700; color: #fff; background: #000; display: inline-block; padding: 4px 12px; text-transform: uppercase; letter-spacing: 2px; border-radius: 4px; }
-        .rich-editor { padding: 20px 30px 40px 30px; font-size: 16px; color: #000; line-height: 1.6; outline: none; min-height: 180px; }
+        .email-sheet { max-width: 500px; margin: 0 auto; background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.05); font-family: sans-serif; color: #000; }
+        .email-sheet h1 { margin: 0; font-size: 22px; font-weight: 800; text-transform: uppercase; color: #000; letter-spacing: 1px; font-family: sans-serif; line-height: normal; }
+        .email-badge { margin: 12px 0 0 0; font-size: 11px; font-weight: 700; color: #fff; background: #000; display: inline-block; padding: 4px 12px; text-transform: uppercase; letter-spacing: 2px; border-radius: 4px; font-family: sans-serif; line-height: normal; }
+        /* Matches the sent email's body cell (generateEmailHtml) so the editor looks like the preview */
+        .rich-editor { padding: 20px 30px 40px 30px; font-family: sans-serif; font-size: 16px; color: #000; line-height: 1.6; outline: none; min-height: 180px; white-space: normal; }
+        .rich-editor b, .rich-editor strong { font-weight: bold; }
+        .rich-editor div, .rich-editor p { margin: 0; }
         .rich-editor:empty::before { content: 'Click here and start typing your email...'; color: #bbb; pointer-events: none; }
         .rich-editor .email-var { display: inline-block; background: #ede9fe; border: 1px solid #c4b5fd; color: #6d28d9; padding: 1px 8px; border-radius: 9999px; font-size: 0.78rem; font-weight: 600; cursor: default; user-select: all; line-height: 1.6; }
-        .email-footer { text-align: center; padding: 24px 20px; border-top: 1px solid #f0f0f0; font-size: 11px; font-weight: 700; color: #bbb; text-transform: uppercase; letter-spacing: 1px; }
+        .email-footer { text-align: center; padding: 30px 20px; border-top: 1px solid #f0f0f0; font-size: 11px; font-weight: 700; color: #bbb; text-transform: uppercase; letter-spacing: 1px; font-family: sans-serif; }
         .rich-editor a.email-link { color: #2563eb; text-decoration: underline; cursor: text; }
-        .rich-editor a.email-btn { display: inline-block; background: #2563eb; color: #fff; text-decoration: none; font-weight: 700; padding: 10px 22px; border-radius: 9999px; cursor: default; user-select: all; }
+        .rich-editor a.email-btn { display: inline-block; background: #2563eb; color: #fff; text-decoration: none; font-weight: 700; padding: 12px 26px; border-radius: 9999px; font-family: sans-serif; cursor: default; user-select: all; }
         .rich-toolbar-btn.wide { width: auto; padding: 0 10px; font-weight: 500; font-size: 12px; gap: 4px; }
 
         /* Who gets which email */
@@ -707,9 +710,9 @@
                     <h1 id="customEmailLiveHeading">Event Info & Ticket</h1>
                     <p id="customEmailLiveBadge" class="email-badge">Event Update</p>
                 </div>
-                <div id="customEmailRichEditor" class="rich-editor" contenteditable="true" oninput="richEditorChanged('customEmailRichEditor','customEmailBody')"></div>
+                <div id="customEmailRichEditor" class="rich-editor" contenteditable="true" oninput="richEditorChanged('customEmailRichEditor','customEmailBody')" onpaste="richEditorPaste(event,'customEmailRichEditor','customEmailBody')"></div>
                 <div id="customEmailLiveQR"></div>
-                <div class="email-footer">&copy; Canyon Activities Board</div>
+                <div class="email-footer">&copy; <span class="js-year"></span> Canyon Activities Board</div>
             </div>
         </div>
 
@@ -1105,9 +1108,9 @@
                             <h1 id="liveEmailHeading">Event Info & Ticket</h1>
                             <p id="liveEmailBadge" class="email-badge">Official Access Pass</p>
                         </div>
-                        <div id="richEmailEditor" class="rich-editor" contenteditable="true" oninput="richEditorChanged()"></div>
+                        <div id="richEmailEditor" class="rich-editor" contenteditable="true" oninput="richEditorChanged()" onpaste="richEditorPaste(event,'richEmailEditor','emailTemplateInput')"></div>
                         <div id="liveEmailQR"></div>
-                        <div class="email-footer">&copy; Canyon Activities Board</div>
+                        <div class="email-footer">&copy; <span class="js-year"></span> Canyon Activities Board</div>
                     </div>
                 </div>
 
@@ -1454,6 +1457,8 @@
                 </div>` : '';
         }
     }
+
+    document.addEventListener('DOMContentLoaded', () => document.querySelectorAll('.js-year').forEach(el => el.textContent = new Date().getFullYear()));
 
     function updatePreview() {
         renderLiveChrome('liveEmail',
@@ -2227,25 +2232,70 @@
         return html.replace(/\n/g, '<br>');
     }
 
+    // Editor DOM -> stored text. Walks the DOM so every line break, blank line and bold run
+    // the editor shows ends up in the email (Chrome mixes <div>, <br>, <b> and
+    // <span style="font-weight:…"> as you type, merge lines or paste).
     function richToPlain(editor) {
-        const clone = editor.cloneNode(true);
-        clone.querySelectorAll('.email-var').forEach(el => el.replaceWith(el.getAttribute('data-var') || el.textContent));
-        clone.querySelectorAll('a[href]').forEach(a => {
-            const label = (a.textContent || '').replace(/[\[\]]/g, '').trim();
-            const url = a.getAttribute('href');
-            a.replaceWith(!label ? '' : a.classList.contains('email-btn') ? `[button:${label}](${url})` : `[${label}](${url})`);
-        });
-        let html = clone.innerHTML;
-        html = html.replace(/<b>(.*?)<\/b>/gi, '**$1**').replace(/<strong>(.*?)<\/strong>/gi, '**$1**');
-        html = html.replace(/<div><br\s*\/?><\/div>/gi, '\n');
-        html = html.replace(/<\/div>\s*<div>/gi, '\n');
-        html = html.replace(/<br\s*\/?>/gi, '\n');
-        html = html.replace(/<div>/gi, '\n').replace(/<\/div>/gi, '');
-        const tmp = document.createElement('div');
-        tmp.innerHTML = html;
-        let result = (tmp.textContent || '').replace(/ /g, ' ');
-        if (result.startsWith('\n')) result = result.substring(1);
-        return result;
+        const BLOCK = /^(DIV|P|LI|UL|OL|H[1-6]|BLOCKQUOTE|PRE|TABLE|TR|SECTION|ARTICLE|HEADER|FOOTER)$/;
+        let out = '', boldOpen = false;
+        const atLineStart = () => out === '' || out.endsWith('\n');
+        const setBold = want => { if (want !== boldOpen) { out += '**'; boldOpen = want; } };
+        const newline = () => { setBold(false); out += '\n'; };
+        const emit = (text, bold) => {
+            if (!text) return;
+            if (!text.trim()) { out += text; return; }   // spaces never open/close bold
+            setBold(bold); out += text;
+        };
+        const weightOf = (el, inherited) => {
+            const w = el.style && el.style.fontWeight;
+            if (w) return w === 'bold' || w === 'bolder' || parseInt(w, 10) >= 600;
+            return /^(B|STRONG|H[1-6])$/.test(el.tagName) ? true : inherited;
+        };
+        const walk = (node, bold) => {
+            node.childNodes.forEach(n => {
+                if (n.nodeType === 3) { emit(n.nodeValue.replace(/\u00a0/g, ' ').replace(/[\r\n\t]+/g, ' '), bold); return; }
+                if (n.nodeType !== 1 || /^(SCRIPT|STYLE|META|TITLE|IMG)$/.test(n.tagName)) return;
+                if (n.tagName === 'BR') { newline(); return; }
+                if (n.classList.contains('email-var')) { emit(n.getAttribute('data-var') || n.textContent, bold); return; }
+                const b = weightOf(n, bold);
+                if (n.tagName === 'A' && n.getAttribute('href')) {
+                    const label = (n.textContent || '').replace(/[\[\]]/g, '').replace(/\s+/g, ' ').trim();
+                    const url = n.getAttribute('href');
+                    if (label) emit(n.classList.contains('email-btn') ? `[button:${label}](${url})` : `[${label}](${url})`, n.classList.contains('email-btn') ? false : b);
+                    return;
+                }
+                if (BLOCK.test(n.tagName)) {
+                    if (!atLineStart()) newline();
+                    walk(n, b);
+                    if (!atLineStart()) newline();
+                    return;
+                }
+                walk(n, b);
+            });
+        };
+        walk(editor, false);
+        setBold(false);
+        // a trailing line break is just the end of the last line
+        return out.replace(/\n$/, '');
+    }
+
+    // Paste: keep line breaks, bold and links, drop the source's fonts/sizes/colors/margins
+    // (the email can't show them, so the editor shouldn't either).
+    function richEditorPaste(e, editorId, textareaId) {
+        const cd = e.clipboardData;
+        if (!cd) return;
+        e.preventDefault();
+        const html = cd.getData('text/html');
+        let plain;
+        if (html) {
+            const tmp = document.createElement('div');
+            tmp.innerHTML = html.replace(/<!--[\s\S]*?-->/g, '');
+            plain = richToPlain(tmp);
+        } else {
+            plain = (cd.getData('text/plain') || '').replace(/\r\n?/g, '\n');
+        }
+        document.execCommand('insertHTML', false, plainToRich(plain));
+        richEditorChanged(editorId, textareaId);
     }
 
     function syncTextareaToRich(editorId = 'richEmailEditor', textareaId = 'emailTemplateInput') {
