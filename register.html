@@ -635,7 +635,10 @@
                 if (r.email && g.email_sent === 'Yes') {
                     // The old ticket went to someone else's inbox: issue a new ticket id and drop the old one
                     ops.push((async () => {
-                        const { error } = await _supabase.from('guests').insert([withHost({ ...fields, event_id: eventRow.id, status: g.status, email_sent: 'No' }, manageHost.id)]);
+                        // Keep the original sign-up time on the replacement row
+                        const { data: orig } = await _supabase.from('guests').select('created_at').eq('id', g.id).maybeSingle();
+                        const { error } = await _supabase.from('guests').insert([withHost({ ...fields, event_id: eventRow.id, status: g.status, email_sent: 'No',
+                            ...(orig?.created_at ? { created_at: orig.created_at } : {}) }, manageHost.id)]);
                         if (!error) await _supabase.from('guests').delete().eq('id', g.id);
                         else throw error;
                     })());
