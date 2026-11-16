@@ -1300,6 +1300,18 @@
     function guestsOfHost(host, list = currentData.vips) {
         return list.filter(v => (v.team || '').startsWith('Guest of ') && hostOfGuest(v, list)?.id === host.id);
     }
+    // The main contact in the active event already using this email (one per event, across
+    // every form), or null. exceptId skips that row (when editing someone's own email).
+    function mainContactWithEmail(email, exceptId = null) {
+        const e = (email || '').trim().toLowerCase();
+        if (!e) return null;
+        return currentData.vips.find(v => v.id !== exceptId && !(v.team || '').startsWith('Guest of ')
+            && (v.email || '').trim().toLowerCase() === e) || null;
+    }
+    function mainContactTakenMessage(email, other) {
+        return `${email} is already the main contact for ${other.first} ${other.last}'s registration (${cleanTeamName(getVIPType(other))}) in this event.\n\nEach email can only be the main contact once per event. Open that registration to add guests, or use a different email.`;
+    }
+
     // Whether the guests table has the host_id column yet (added by supabase-setup.sql)
     let hostIdColumn = null;
     async function hasHostIdColumn() {
@@ -1833,6 +1845,13 @@
 
     async function saveParty(e) {
         e.preventDefault();
+        // A main contact's new email can't already be another registration's main contact
+        for (const [id, fields] of Object.entries(pendingEdits)) {
+            const g = currentData.vips.find(v => v.id === id);
+            if (!g || fields.email === undefined || (g.team || '').startsWith('Guest of ')) continue;
+            const taken = mainContactWithEmail(fields.email, id);
+            if (taken) { alert(mainContactTakenMessage(fields.email.trim(), taken)); return; }
+        }
         showToast("Saving...");
         const updatePromises = [];
         
@@ -3685,6 +3704,9 @@
         const type = container.dataset.type;
         const limit = parseInt(container.dataset.limit || 0);
         let nameParts = document.getElementById('mainName').value.trim().split(' ');
+        const mainEmail = document.getElementById('mainEmail').value.trim();
+        const taken = mainContactWithEmail(mainEmail);
+        if (taken) { alert(mainContactTakenMessage(mainEmail, taken)); return; }
         
         let mainPayload = { 
             event_id: currentData.activeId, 
