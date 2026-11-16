@@ -164,6 +164,38 @@ alter table public.guests add column if not exists live_claim_id uuid;
 -- Team name for a VIP party (set on the main contact, shown at check in for the whole party)
 alter table public.guests add column if not exists team_name     text;
 
+-- Which main contact a guest belongs to. Guests used to be linked only by the
+-- text "Guest of First Last", so two registrations under the same name (e.g. a
+-- VIP form and an early access form from the same person) shared one guest
+-- list and went over the limit. host_id links each guest to one main-contact row.
+-- (Same type as guests.id; no foreign key, so deleting a host never touches guests.)
+do $$
+begin
+    if not exists (select 1 from information_schema.columns
+                    where table_schema = 'public' and table_name = 'guests' and column_name = 'host_id') then
+        execute format('alter table public.guests add column host_id %s',
+            (select format_type(atttypid, atttypmod) from pg_attribute
+              where attrelid = 'public.guests'::regclass and attname = 'id'));
+    end if;
+end $$;
+create index if not exists guests_host_idx on public.guests (host_id) where host_id is not null;
+
+-- Fill host_id for existing guests whose host is unambiguous (exactly one main
+-- contact in the event with that name). Only rows with no host_id yet are set.
+-- Guests of two same-named main contacts can't be told apart automatically:
+-- see the query at the bottom of this file to find and fix those by hand.
+update public.guests g
+   set host_id = h.id
+  from public.guests h
+ where g.host_id is null
+   and g.team like 'Guest of %'
+   and h.event_id = g.event_id
+   and h.team not like 'Guest of %'
+   and btrim(h.first_name || ' ' || h.last_name) = btrim(substr(g.team, 10))
+   and (select count(*) from public.guests h2
+         where h2.event_id = g.event_id and h2.team not like 'Guest of %'
+           and btrim(h2.first_name || ' ' || h2.last_name) = btrim(substr(g.team, 10))) = 1;
+
 create table if not exists public.live_ticket_settings (
     event_id          text primary key,
     status            text        not null default 'closed',   -- 'closed' | 'open' | 'auto'
@@ -360,6 +392,7 @@ declare
     v_email  text;
     v_sid    text;
     v_host   text;
+    v_host_id public.guests.id%type;
     v_ids    jsonb := '[]'::jsonb;
     v_id     text;
     i        integer := 0;
@@ -464,13 +497,16 @@ begin
     v_host := (v_people->0->>'first') || ' ' || (v_people->0->>'last');
     i := 0;
     for v_p in select value from jsonb_array_elements(v_people) loop
-        insert into public.guests (event_id, first_name, last_name, email, phone, student_id, team, status, email_sent, live_claim_id)
+        insert into public.guests (event_id, first_name, last_name, email, phone, student_id, team, status, email_sent, live_claim_id, host_id)
         values (v_event, v_p->>'first', v_p->>'last', v_p->>'email',
                 case when i = 0 then v_phone else null end,
                 v_p->>'student_id',
                 case when i = 0 then 'Live Tickets' else 'Guest of ' || v_host end,
-                'Invited', 'No', v_claim)
+                'Invited', 'No', v_claim, v_host_id)
         returning id::text into v_id;
+        if i = 0 then
+            select id into v_host_id from public.guests where id::text = v_id;
+        end if;
         v_ids := v_ids || jsonb_build_object('id', v_id, 'number', i + 1,
             'first', v_p->>'first', 'last', v_p->>'last', 'email', v_p->>'email');
         i := i + 1;
@@ -554,3 +590,21 @@ grant execute on function public.set_admin_password(text, text) to anon, authent
 -- insert into public.admin_secret (id, password_hash)
 -- values (1, extensions.crypt('YOUR PASSWORD', extensions.gen_salt('bf')))
 -- on conflict (id) do update set password_hash = excluded.password_hash;
+
+
+-- ── 6. Fixing guests that were merged under one name ─────────
+-- Guests from before host_id existed are linked by name only. If the same
+-- person has two registrations in one event (e.g. a VIP form and an early
+-- access form), their guests can't be split automatically. This lists them
+-- (run on its own; it changes nothing):
+--
+-- select g.event_id, g.team, g.id as guest_id, g.first_name, g.last_name, g.email,
+--        (select string_agg(h.id::text || ' = ' || h.team, ', ') from public.guests h
+--          where h.event_id = g.event_id and h.team not like 'Guest of %'
+--            and btrim(h.first_name || ' ' || h.last_name) = btrim(substr(g.team, 10))) as possible_hosts
+--   from public.guests g
+--  where g.team like 'Guest of %' and g.host_id is null
+--  order by g.event_id, g.team, g.first_name;
+--
+-- Then point each guest at the right registration (the id before " = "):
+-- update public.guests set host_id = 'HOST ID' where id in ('GUEST ID', 'GUEST ID');

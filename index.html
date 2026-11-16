@@ -1274,13 +1274,41 @@
         return team.replace(/\[(VIP|Staff|Guest)\]/gi, '').trim();
     }
 
+    // A guest's main contact (null if not found). Guests are linked by host_id; older rows
+    // without one fall back to the "Guest of First Last" name, which can't tell apart two
+    // registrations with the same name (e.g. a VIP form and an early access form).
+    function hostOfGuest(guest, list = currentData.vips) {
+        const team = guest.team || '';
+        if (!team.startsWith('Guest of ')) return guest;
+        const isHostRow = v => !(v.team || '').startsWith('Guest of ');
+        if (guest.hostId) {
+            const linked = list.find(v => v.id === guest.hostId && isHostRow(v));
+            if (linked) return linked;
+        }
+        const hostName = team.replace('Guest of ', '').trim();
+        return list.find(v => `${v.first} ${v.last}`.trim() === hostName && isHostRow(v)) || null;
+    }
+    // A main contact's guests (not including the main contact)
+    function guestsOfHost(host, list = currentData.vips) {
+        return list.filter(v => (v.team || '').startsWith('Guest of ') && hostOfGuest(v, list)?.id === host.id);
+    }
+    // Whether the guests table has the host_id column yet (added by supabase-setup.sql)
+    let hostIdColumn = null;
+    async function hasHostIdColumn() {
+        if (hostIdColumn === null) {
+            const { error } = await _supabase.from('guests').select('host_id').limit(1);
+            hostIdColumn = !error;
+        }
+        return hostIdColumn;
+    }
+    const withHost = (row, hostId) => hostIdColumn && hostId ? { ...row, host_id: hostId } : row;
+
     // Helper: Find a guest's actual VIP type by tracing their host
     function getVIPType(guest) {
         let teamStr = guest.team || "Unknown";
         if (teamStr.startsWith("Guest of ")) {
-            let hostName = teamStr.replace("Guest of ", "").trim();
             // Try to find the host to see what their team is
-            let host = currentData.vips.find(v => (v.first + " " + v.last).trim() === hostName && !v.team.startsWith("Guest of "));
+            let host = hostOfGuest(guest);
             if (host) {
                 teamStr = host.team;
             } else {
@@ -1308,9 +1336,8 @@
     function getTemplateTypeForGuest(guest) {
         let teamStr = guest.team || "";
         if (teamStr.startsWith("Guest of ")) {
-            let hostName = teamStr.replace("Guest of ", "").trim();
             // Trace host's true team
-            let host = currentData.vips.find(v => (v.first + " " + v.last).trim() === hostName && !v.team.startsWith("Guest of "));
+            let host = hostOfGuest(guest);
             if (host) teamStr = host.team || "";
         }
         return getTemplateType(teamStr);
@@ -1502,7 +1529,8 @@
             vips: guestsData.map(g => ({
                 id: g.id, first: g.first_name, last: g.last_name, team: g.team,
                 phone: g.phone, email: g.email, shirtSize: g.shirt_size, status: g.status, sent: g.email_sent,
-                studentId: g.student_id, liveClaimId: g.live_claim_id, teamName: g.team_name || ''
+                studentId: g.student_id, liveClaimId: g.live_claim_id, teamName: g.team_name || '',
+                hostId: g.host_id || null
             })),
             groups: groupsData,
             allEvents: eventsData,
@@ -1650,9 +1678,8 @@
     function openPartyModal(id) {
         const user = currentData.vips.find(v => v.id === id);
         if (!user) return;
-        let hostName = user.team.startsWith("Guest of ") ? user.team.replace("Guest of ", "").trim() : (user.first + " " + user.last).trim();
-        const host = currentData.vips.find(v => (v.first + " " + v.last).trim() === hostName && !v.team.startsWith("Guest of ")) || user;
-        currentParty = [host, ...currentData.vips.filter(v => v.team === `Guest of ${hostName}`)];
+        const host = hostOfGuest(user) || user;
+        currentParty = host === user && (user.team || '').startsWith('Guest of ') ? [user] : [host, ...guestsOfHost(host)];
         pendingEdits = {};
         currentDetailId = id;
         renderGuestDetail();
@@ -1796,13 +1823,19 @@
                     ...((fields.team_name !== undefined ? fields.team_name : originalGuest.teamName) ? { team_name: (fields.team_name !== undefined ? fields.team_name : originalGuest.teamName).trim() } : {}),
                     status: originalGuest.status,
                     email_sent: 'No', // Automatically flag as unsent
-                    event_id: currentData.activeId
+                    event_id: currentData.activeId,
+                    ...(originalGuest.hostId ? { host_id: originalGuest.hostId } : {})
                 };
-                
+                const isHostRow = !(newGuestData.team || '').startsWith('Guest of ');
+
                 // Create new record -> delete old record (this creates a brand new ID/ticket code)
                 const promise = (async () => {
-                    const { error } = await _supabase.from('guests').insert([newGuestData]);
+                    const { data: newRows, error } = await _supabase.from('guests').insert([newGuestData]).select('id');
                     if (!error) {
+                        // A main contact's new row keeps their guests (they're linked by id)
+                        if (isHostRow && newRows?.[0] && await hasHostIdColumn()) {
+                            await _supabase.from('guests').update({ host_id: newRows[0].id }).eq('host_id', id);
+                        }
                         await _supabase.from('guests').delete().eq('id', id);
                     } else {
                         console.error("Failed to insert new guest for ticket change:", error);
@@ -1830,13 +1863,14 @@
     async function addPartyGuestUI() {
         const host = currentParty[0];
         const hostName = `${host.first} ${host.last}`;
-        const { data } = await _supabase.from('guests').insert([{
+        await hasHostIdColumn();
+        const { data } = await _supabase.from('guests').insert([withHost({
             first_name: "New", last_name: "Guest", team: `Guest of ${hostName}`,
             event_id: currentData.activeId, status: 'Invited', email_sent: 'No'
-        }]).select();
+        }, (host.team || '').startsWith('Guest of ') ? host.hostId : host.id)]).select();
         if (data && data[0]) {
             const added = data[0];
-            currentParty.push({ id: added.id, first: added.first_name, last: added.last_name, team: added.team, email: '', phone: '', shirtSize: '' });
+            currentParty.push({ id: added.id, first: added.first_name, last: added.last_name, team: added.team, hostId: added.host_id || null, email: '', phone: '', shirtSize: '' });
             renderPartyModal();
         }
     }
@@ -2401,11 +2435,8 @@
 
     // A guest's main contact (themselves when they are the main contact)
     function partyHostOf(guest) {
-        const team = guest.team || '';
-        if (!team.startsWith('Guest of ')) return { host: guest, isHost: true };
-        const hostName = team.replace('Guest of ', '').trim();
-        const host = currentData.vips.find(v => `${v.first} ${v.last}`.trim() === hostName && !(v.team || '').startsWith('Guest of '));
-        return { host: host || null, isHost: false };
+        if (!(guest.team || '').startsWith('Guest of ')) return { host: guest, isHost: true };
+        return { host: hostOfGuest(guest), isHost: false };
     }
     function isLiveTicketGuest(guest) { return !!guest.liveClaimId || partyHostOf(guest).host?.team === 'Live Tickets'; }
 
@@ -3652,7 +3683,8 @@
         const mainTeamName = document.getElementById('mainTeamName')?.value.trim();
         if (mainTeamName) mainPayload.team_name = mainTeamName;
 
-        const { error: mainErr } = await _supabase.from('guests').insert([mainPayload]);
+        await hasHostIdColumn();
+        const { data: mainRows, error: mainErr } = await _supabase.from('guests').insert([mainPayload]).select('id');
         if (mainErr) {
             console.error(mainErr);
             if (/team_name/.test(mainErr.message || '')) alert("Couldn't save the team name: the database is missing the team_name column.\n\nRun supabase-setup.sql in Supabase → SQL Editor, then try again.");
@@ -3664,13 +3696,13 @@
             const gName = document.getElementById(`g${i}Name`)?.value.trim();
             if (gName) {
                 const gp = gName.split(' ');
-                inserts.push(_supabase.from('guests').insert([{
+                inserts.push(_supabase.from('guests').insert([withHost({
                     first_name: gp[0], last_name: gp.slice(1).join(' ') || '',
                     email: document.getElementById(`g${i}Email`)?.value.trim(),
                     shirt_size: document.getElementById(`g${i}Shirt`)?.value || null,
                     team: `Guest of ${mainPayload.first_name} ${mainPayload.last_name}`,
                     event_id: currentData.activeId, status: 'Invited', email_sent: 'No'
-                }]));
+                }, mainRows?.[0]?.id)]));
             }
         }
         await Promise.all(inserts);
@@ -3815,7 +3847,7 @@
             const cfg = vipFormConfig(formsStore, currentData.activeId, type);
             const party = guest.__sample
                 ? [{ first_name: 'Jordan', last_name: 'Rivera' }, { first_name: 'Sam', last_name: 'Lee' }].slice(0, Math.max(0, Math.min(2, cfg.guestLimit)))
-                : currentData.vips.filter(m => (m.team || '').trim() === `Guest of ${guest.first} ${guest.last}`.trim()).map(m => ({ first_name: m.first, last_name: m.last }));
+                : guestsOfHost(guest).map(m => ({ first_name: m.first, last_name: m.last }));
             const url = new URL(vipFormLink(location.href, { event: currentData.activeId, form: type, edit: '1' }));
             url.searchParams.set('f', guest.first || ''); url.searchParams.set('l', guest.last || ''); url.searchParams.set('e', guest.email || '');
             const tpl = typeof v.tpl === 'function' ? v.tpl(guest) : v.tpl;
@@ -3921,8 +3953,8 @@
         if (!def) return;
         const lib = currentLibrary();
         const hosts = currentData.vips.filter(v => !(v.team || '').startsWith('Guest of ') && vipFormTypeForTeam(v.team) === type);
-        const hostTeams = new Set(hosts.map(h => `Guest of ${h.first} ${h.last}`.trim()));
-        const guests = currentData.vips.filter(v => hostTeams.has((v.team || '').trim()));
+        const hostIds = new Set(hosts.map(h => h.id));
+        const guests = currentData.vips.filter(v => (v.team || '').startsWith('Guest of ') && hostIds.has(hostOfGuest(v)?.id));
         const team = formTeam(type);
         const tplOf = role => ({ ...(lib.templates[formRoleTemplateId(type, role)] || { subj: '', body: '' }), includeTicket: true });
         const nameOf = role => templateName(formRoleTemplateId(type, role)) || 'none';
@@ -4162,12 +4194,7 @@
         const nameOf = v => `${v.first || ''} ${v.last || ''}`.trim();
 
         // Main contact for each row, so parties stay together
-        const hosts = vips.filter(v => !(v.team || '').startsWith('Guest of '));
-        const hostFor = v => {
-            if (!(v.team || '').startsWith('Guest of ')) return v;
-            const hostName = v.team.replace('Guest of ', '').trim();
-            return hosts.find(h => nameOf(h) === hostName) || null;
-        };
+        const hostFor = v => hostOfGuest(v, vips);
 
         const rows = vips.map(v => {
             const host = hostFor(v);

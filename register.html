@@ -185,12 +185,47 @@
         BREVO_API_KEY = (data?.value || '').trim();
         return BREVO_API_KEY;
     }
-    // Main-contact rows for this event with this email (case-insensitive exact match)
-    async function findHostsByEmail(eventId, email) {
+    // Main-contact rows for this event and form with this email (case-insensitive exact match).
+    // Scoped to one form so the same person can have, say, a VIP registration and an
+    // early access registration, each with its own guests and limit.
+    async function findHostsByEmail(eventId, email, type) {
         const pattern = email.replace(/[\\%_]/g, '\\$&');
         const { data } = await _supabase.from('guests').select('id, first_name, last_name, team')
             .eq('event_id', eventId).ilike('email', pattern);
-        return (data || []).filter(g => !(g.team || '').startsWith('Guest of '));
+        return (data || []).filter(g => !(g.team || '').startsWith('Guest of ') && vipFormTypeForTeam(g.team) === type);
+    }
+
+    // Guests are linked to their main contact by host_id (see supabase-setup.sql). Until that
+    // column exists the page falls back to the old name-only link ("Guest of First Last").
+    let hostIdColumn = null;
+    async function hasHostIdColumn() {
+        if (hostIdColumn === null) {
+            const { error } = await _supabase.from('guests').select('host_id').limit(1);
+            hostIdColumn = !error;
+        }
+        return hostIdColumn;
+    }
+    const withHost = (row, hostId) => hostIdColumn && hostId ? { ...row, host_id: hostId } : row;
+
+    // A registration's guests: rows linked by host_id, plus older rows linked only by name —
+    // those only when no other registration in the event has the same name (otherwise we
+    // can't tell whose they are, which is how two registrations got merged).
+    async function loadPartyGuests(host) {
+        const team = hostTeamFor(host.first_name, host.last_name);
+        if (!(await hasHostIdColumn())) {
+            const { data } = await _supabase.from('guests').select(MANAGE_COLUMNS)
+                .eq('event_id', host.event_id).eq('team', team).order('first_name');
+            return data || [];
+        }
+        const [linked, legacy, sameName] = await Promise.all([
+            _supabase.from('guests').select(MANAGE_COLUMNS).eq('event_id', host.event_id).eq('host_id', host.id),
+            _supabase.from('guests').select(MANAGE_COLUMNS).eq('event_id', host.event_id).eq('team', team).is('host_id', null),
+            _supabase.from('guests').select('id, team').eq('event_id', host.event_id)
+                .eq('first_name', host.first_name).eq('last_name', host.last_name)
+        ]);
+        const otherHosts = (sameName.data || []).filter(h => h.id !== host.id && !(h.team || '').startsWith('Guest of '));
+        const rows = [...(linked.data || []), ...(otherHosts.length ? [] : (legacy.data || []))];
+        return rows.sort((a, b) => (a.first_name || '').localeCompare(b.first_name || ''));
     }
 
     // ── email ──────────────────────────────────────────────────
@@ -246,7 +281,7 @@
     const normName = (v) => (v || '').trim().toLowerCase().replace(/\s+/g, ' ');
     async function findRegistration(first, last, email) {
         if (!normName(first) || !normName(last) || !isEmail((email || '').trim())) return null;
-        return (await findHostsByEmail(eventRow.id, email.trim()))
+        return (await findHostsByEmail(eventRow.id, email.trim(), pageFormType || formType))
             .find(h => normName(h.first_name) === normName(first) && normName(h.last_name) === normName(last)) || null;
     }
 
@@ -399,7 +434,8 @@
             cfg = vipFormConfig(await loadFormsStore(), eventRow.id, formType);
             if (!vipFormState(cfg).open) { showClosedState(); return; }
 
-            const existing = await findHostsByEmail(eventRow.id, host.email);
+            const existing = await findHostsByEmail(eventRow.id, host.email, formType);
+            await hasHostIdColumn();
             if (existing.length) {
                 showState('wait', "You're already registered", vipFormCanEdit(cfg)
                     ? `There's already a registration for ${host.email}. Confirm your name and email below to view or change it.`
@@ -418,11 +454,11 @@
 
             let guestRows = [];
             if (guests.length) {
-                const { data, error } = await _supabase.from('guests').insert(guests.map(g => ({
+                const { data, error } = await _supabase.from('guests').insert(guests.map(g => withHost({
                     event_id: eventRow.id, first_name: g.first, last_name: g.last, email: g.email,
                     shirt_size: g.shirt || null, team: hostTeamFor(host.first, host.last),
                     status: 'Invited', email_sent: 'No'
-                }))).select();
+                }, hostRow.id))).select();
                 if (error) throw error;
                 guestRows = data || [];
             }
@@ -466,9 +502,7 @@
         cfg = formType ? vipFormConfig(await loadFormsStore(), eventRow.id, formType) : null;
 
         manageHost = host;
-        const { data: guests } = await _supabase.from('guests').select(MANAGE_COLUMNS)
-            .eq('event_id', eventRow.id).eq('team', hostTeamFor(host.first_name, host.last_name)).order('first_name');
-        manageGuests = guests || [];
+        manageGuests = await loadPartyGuests(host);
         removedIds = new Set();
         renderManage();
     }
@@ -586,8 +620,8 @@
             }
             for (const r of rows) {
                 if (r.isNew) {
-                    ops.push(_supabase.from('guests').insert([{ event_id: eventRow.id, first_name: r.first, last_name: r.last, email: r.email,
-                        shirt_size: r.shirt || null, team: newTeam, status: 'Invited', email_sent: 'No' }]));
+                    ops.push(_supabase.from('guests').insert([withHost({ event_id: eventRow.id, first_name: r.first, last_name: r.last, email: r.email,
+                        shirt_size: r.shirt || null, team: newTeam, status: 'Invited', email_sent: 'No' }, manageHost.id)]));
                     continue;
                 }
                 const g = manageGuests.find(x => x.id === r.key);
@@ -601,7 +635,7 @@
                 if (r.email && g.email_sent === 'Yes') {
                     // The old ticket went to someone else's inbox: issue a new ticket id and drop the old one
                     ops.push((async () => {
-                        const { error } = await _supabase.from('guests').insert([{ ...fields, event_id: eventRow.id, status: g.status, email_sent: 'No' }]);
+                        const { error } = await _supabase.from('guests').insert([withHost({ ...fields, event_id: eventRow.id, status: g.status, email_sent: 'No' }, manageHost.id)]);
                         if (!error) await _supabase.from('guests').delete().eq('id', g.id);
                         else throw error;
                     })());
@@ -609,10 +643,8 @@
                     ops.push(_supabase.from('guests').update(fields).eq('id', g.id));
                 }
             }
-            if (oldTeam !== newTeam) {
-                // Guests not shown above (shouldn't happen, but keep the party together)
-                ops.push(_supabase.from('guests').update({ team: newTeam }).eq('event_id', eventRow.id).eq('team', oldTeam));
-            }
+            // Every guest of this registration was updated above. (Renaming by team text here
+            // would also rename the guests of another registration with the same name.)
             const results = await Promise.all(ops);
             const failed = results.find(r => r && r.error);
             if (failed) throw failed.error;
