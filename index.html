@@ -880,6 +880,14 @@
                 <select id="shirtFilter" class="modern-input" onchange="filterTable()">
                     <option value="ALL">All shirt sizes</option>
                 </select>
+                <select id="recentFilter" class="modern-input" onchange="filterTable()" title="Show who signed up recently, newest first">
+                    <option value="ALL">Signed up: any time</option>
+                    <option value="1">Last hour</option>
+                    <option value="24">Last 24 hours</option>
+                    <option value="72">Last 3 days</option>
+                    <option value="168">Last 7 days</option>
+                    <option value="NEWEST">Everyone, newest first</option>
+                </select>
             </div>
             <div class="table-scroll">
                 <table>
@@ -1309,6 +1317,20 @@
         return d && !isNaN(d) ? d.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
     }
 
+    // Short version for the guest list: "Today 3:42 PM", "Yesterday 9:05 AM", "Nov 14, 3:42 PM"
+    function formatRegisteredShort(ts) {
+        const d = ts ? new Date(ts) : null;
+        if (!d || isNaN(d)) return '';
+        const time = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+        const dayStart = x => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+        const days = Math.round((dayStart(new Date()) - dayStart(d)) / 86400000);
+        if (days === 0) return `Today ${time}`;
+        if (days === 1) return `Yesterday ${time}`;
+        const opts = { month: 'short', day: 'numeric' };
+        if (d.getFullYear() !== new Date().getFullYear()) opts.year = 'numeric';
+        return `${d.toLocaleDateString(undefined, opts)}, ${time}`;
+    }
+
     // Helper: Find a guest's actual VIP type by tracing their host
     function getVIPType(guest) {
         let teamStr = guest.team || "Unknown";
@@ -1648,12 +1670,14 @@
 
         const tableBody = document.getElementById('guestTableBody');
         if (tableBody) {
-            tableBody.innerHTML = currentData.vips.map(v => {
+            tableBody.innerHTML = currentData.vips.map((v, idx) => {
                 const isLabel = v.sent === 'N/A';
                 const isIn = v.status === 'Checked In';
                 const actualType = cleanTeamName(getVIPType(v));
                 const teamName = partyTeamName(v);
-                const sub = teamName ? escapeHtml(teamName) : '';
+                const reg = formatRegisteredShort(v.registeredAt);
+                const regMs = v.registeredAt ? new Date(v.registeredAt).getTime() || 0 : 0;
+                const sub = [teamName ? escapeHtml(teamName) : '', reg ? `<span title="${escapeHtml(formatRegistered(v.registeredAt))}">Signed up ${escapeHtml(reg)}</span>` : ''].filter(Boolean).join(' · ');
                 const ticket = isLabel
                     ? `<span class="status-badge na">Main Contact</span>`
                     : `<span class="status-badge ${v.sent === 'Yes' ? 'sent' : 'draft'}">${v.sent === 'Yes' ? 'Sent' : 'Unsent'}</span>`;
@@ -1662,7 +1686,7 @@
                     : `<button onclick="event.stopPropagation(); checkIn('${v.id}')" class="btn-action btn-checkin ${isIn ? 'in' : ''}">${isIn ? '✓ Arrived' : 'Mark In'}</button>`;
 
                 return `
-                <tr class="guest-row ${isLabel ? 'label-row' : ''}" onclick="openPartyModal('${v.id}')" data-type="${escapeHtml(actualType)}" data-sent="${escapeHtml(v.sent)}" data-in="${isIn ? 1 : 0}" data-shirt="${escapeHtml((v.shirtSize || '').trim() === '-' ? '' : (v.shirtSize || '').trim())}" data-search="${escapeHtml(`${v.first} ${v.last} ${v.email || ''} ${v.phone || ''} ${v.studentId || ''} ${actualType} ${teamName} ${v.team || ''}`.toUpperCase())}">
+                <tr class="guest-row ${isLabel ? 'label-row' : ''}" onclick="openPartyModal('${v.id}')" data-idx="${idx}" data-reg="${regMs}" data-type="${escapeHtml(actualType)}" data-sent="${escapeHtml(v.sent)}" data-in="${isIn ? 1 : 0}" data-shirt="${escapeHtml((v.shirtSize || '').trim() === '-' ? '' : (v.shirtSize || '').trim())}" data-search="${escapeHtml(`${v.first} ${v.last} ${v.email || ''} ${v.phone || ''} ${v.studentId || ''} ${actualType} ${teamName} ${v.team || ''}`.toUpperCase())}">
                     <td class="c-name"><div class="name-cell"><span class="avatar" style="background:${avatarColor(v.first + v.last)}">${escapeHtml(((v.first || '?')[0] + (v.last || '')[0] || '').toUpperCase())}</span><div><div class="guest-name">${escapeHtml(v.first)} ${escapeHtml(v.last)}</div>${sub ? `<div class="group-sub">${sub}</div>` : ''}</div></div></td>
                     <td class="c-type"><span class="group-tag">${escapeHtml(actualType)}</span><span class="m-ticket">${ticket}</span></td>
                     <td class="c-ticket">${ticket}</td>
@@ -4281,7 +4305,20 @@
         const textVal = document.getElementById("search").value.trim().toUpperCase(); 
         const typeVal = document.getElementById("typeFilter")?.value || "ALL";
         const shirtVal = document.getElementById("shirtFilter")?.value || "ALL";
-        
+        const recentVal = document.getElementById("recentFilter")?.value || "ALL";
+        const since = /^\d+$/.test(recentVal) ? Date.now() - Number(recentVal) * 3600000 : null;
+
+        // "Signed up" filter lists newest first; otherwise keep the normal (name) order
+        const body = document.getElementById("guestTableBody");
+        if (body) {
+            const rows = Array.from(body.children);
+            const key = recentVal === "ALL"
+                ? (a, b) => a.dataset.idx - b.dataset.idx
+                : (a, b) => (b.dataset.reg - a.dataset.reg) || (a.dataset.idx - b.dataset.idx);
+            const sorted = rows.slice().sort(key);
+            if (sorted.some((r, i) => r !== rows[i])) sorted.forEach(r => body.appendChild(r));
+        }
+
         document.querySelectorAll("#guestTableBody tr").forEach(r => {
             const rowSent = r.getAttribute('data-sent');
             const rowIn = r.getAttribute('data-in') === '1';
@@ -4293,7 +4330,8 @@
                 || (quickFilter === 'unsent' && rowSent === 'No')
                 || (quickFilter === 'in' && rowIn)
                 || (quickFilter === 'out' && !rowIn && rowSent !== 'N/A');
-            r.style.display = (textMatch && typeMatch && shirtMatch && quickMatch) ? "" : "none";
+            const recentMatch = since === null || Number(r.getAttribute('data-reg') || 0) >= since;
+            r.style.display = (textMatch && typeMatch && shirtMatch && quickMatch && recentMatch) ? "" : "none";
         }); 
     }
     
