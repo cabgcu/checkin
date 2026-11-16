@@ -185,14 +185,13 @@
         BREVO_API_KEY = (data?.value || '').trim();
         return BREVO_API_KEY;
     }
-    // Main-contact rows for this event and form with this email (case-insensitive exact match).
-    // Scoped to one form so the same person can have, say, a VIP registration and an
-    // early access registration, each with its own guests and limit.
-    async function findHostsByEmail(eventId, email, type) {
+    // Main-contact rows for this event with this email (case-insensitive exact match), on any
+    // form. One email can be the main contact for only one registration per event.
+    async function findHostsByEmail(eventId, email) {
         const pattern = email.replace(/[\\%_]/g, '\\$&');
         const { data } = await _supabase.from('guests').select('id, first_name, last_name, team')
             .eq('event_id', eventId).ilike('email', pattern);
-        return (data || []).filter(g => !(g.team || '').startsWith('Guest of ') && vipFormTypeForTeam(g.team) === type);
+        return (data || []).filter(g => !(g.team || '').startsWith('Guest of '));
     }
 
     // Guests are linked to their main contact by host_id (see supabase-setup.sql). Until that
@@ -281,7 +280,7 @@
     const normName = (v) => (v || '').trim().toLowerCase().replace(/\s+/g, ' ');
     async function findRegistration(first, last, email) {
         if (!normName(first) || !normName(last) || !isEmail((email || '').trim())) return null;
-        return (await findHostsByEmail(eventRow.id, email.trim(), pageFormType || formType))
+        return (await findHostsByEmail(eventRow.id, email.trim()))
             .find(h => normName(h.first_name) === normName(first) && normName(h.last_name) === normName(last)) || null;
     }
 
@@ -434,13 +433,20 @@
             cfg = vipFormConfig(await loadFormsStore(), eventRow.id, formType);
             if (!vipFormState(cfg).open) { showClosedState(); return; }
 
-            const existing = await findHostsByEmail(eventRow.id, host.email, formType);
+            const existing = await findHostsByEmail(eventRow.id, host.email);
             await hasHostIdColumn();
             if (existing.length) {
-                showState('wait', "You're already registered", vipFormCanEdit(cfg)
-                    ? `There's already a registration for ${host.email}. Confirm your name and email below to view or change it.`
-                    : `There's already a registration for ${host.email}. Contact the CAB Special Events team if something needs to change.`,
-                    editPanelHtml({ first: host.first, last: host.last, email: host.email }, true));
+                // Could be on another form (e.g. they did early access and are now on the VIP form)
+                const otherType = vipFormTypeForTeam(existing[0].team);
+                const otherForm = otherType && otherType !== formType ? VIP_FORM_TYPES[otherType].label : '';
+                const otherCfg = otherType ? (otherType === formType ? cfg : vipFormConfig(await loadFormsStore(), eventRow.id, otherType)) : null;
+                const already = otherForm
+                    ? `${host.email} is already registered for this event through ${otherForm}. Each email can only register once per event.`
+                    : `There's already a registration for ${host.email}.`;
+                showState('wait', "You're already registered", vipFormCanEdit(otherCfg)
+                    ? `${already} Confirm your name and email below to view or change it.`
+                    : `${already} Contact the CAB Special Events team if something needs to change.`,
+                    vipFormCanEdit(otherCfg) ? editPanelHtml({ first: host.first, last: host.last, email: host.email }, true) : '');
                 return;
             }
 
