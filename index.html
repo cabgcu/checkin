@@ -1303,6 +1303,12 @@
     }
     const withHost = (row, hostId) => hostIdColumn && hostId ? { ...row, host_id: hostId } : row;
 
+    // "Nov 16, 2026, 3:42 PM" from a created_at timestamp ('' if missing)
+    function formatRegistered(ts) {
+        const d = ts ? new Date(ts) : null;
+        return d && !isNaN(d) ? d.toLocaleString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+    }
+
     // Helper: Find a guest's actual VIP type by tracing their host
     function getVIPType(guest) {
         let teamStr = guest.team || "Unknown";
@@ -1530,7 +1536,7 @@
                 id: g.id, first: g.first_name, last: g.last_name, team: g.team,
                 phone: g.phone, email: g.email, shirtSize: g.shirt_size, status: g.status, sent: g.email_sent,
                 studentId: g.student_id, liveClaimId: g.live_claim_id, teamName: g.team_name || '',
-                hostId: g.host_id || null
+                hostId: g.host_id || null, registeredAt: g.created_at || null
             })),
             groups: groupsData,
             allEvents: eventsData,
@@ -1698,7 +1704,7 @@
         const isLabel = g.sent === 'N/A';
         const isIn = g.status === 'Checked In';
         const type = cleanTeamName(getVIPType(g));
-        const ICONS = { mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>', phone: '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/>', shirt: '<path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z"/>', group: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>', ticket: '<path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2"/><path d="M13 17v2"/><path d="M13 11v2"/>' };
+        const ICONS = { mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>', phone: '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.91.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/>', shirt: '<path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z"/>', group: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>', clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>', ticket: '<path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2"/><path d="M13 17v2"/><path d="M13 11v2"/>' };
         const row = (icon, k, v, html) => `<div class="gd-row"><svg viewBox="0 0 24 24">${ICONS[icon]}</svg><span class="k">${k}</span><span class="v ${v ? '' : 'empty'}">${v ? (html || escapeHtml(v)) : 'Not provided'}</span></div>`;
         const chips = [`<span class="group-tag">${escapeHtml(type)}</span>`,
             isLabel ? `<span class="status-badge na">Main Contact</span>` : `<span class="status-badge ${g.sent === 'Yes' ? 'sent' : 'draft'}">${g.sent === 'Yes' ? 'Ticket sent' : 'Ticket unsent'}</span>`,
@@ -1739,6 +1745,7 @@
                     ${row('shirt', 'Shirt size', shirt)}
                     ${partyTeamName(g) ? row('group', 'Team', partyTeamName(g)) : ''}
                     ${row('group', 'Group', type)}
+                    <div class="gd-row"><svg viewBox="0 0 24 24">${ICONS.clock}</svg><span class="k">Registered</span><span class="v ${formatRegistered(g.registeredAt) ? '' : 'empty'}">${escapeHtml(formatRegistered(g.registeredAt) || 'Not recorded')}</span></div>
                     ${isLabel ? '' : row('ticket', 'Ticket ID', '#' + String(g.id).substring(0, 8), `<span style="font-family:monospace;">#${escapeHtml(String(g.id).substring(0, 8))}</span>`)}
                 </div>
             </div>
@@ -1824,7 +1831,9 @@
                     status: originalGuest.status,
                     email_sent: 'No', // Automatically flag as unsent
                     event_id: currentData.activeId,
-                    ...(originalGuest.hostId ? { host_id: originalGuest.hostId } : {})
+                    ...(originalGuest.hostId ? { host_id: originalGuest.hostId } : {}),
+                    // Keep the original sign-up time on the replacement row
+                    ...(originalGuest.registeredAt ? { created_at: originalGuest.registeredAt } : {})
                 };
                 const isHostRow = !(newGuestData.team || '').startsWith('Guest of ');
 
@@ -4211,7 +4220,7 @@
             (b.isHost - a.isHost) ||
             nameOf(a.v).localeCompare(nameOf(b.v)));
 
-        const header = ['VIP Type', 'Team', 'Party (Main Contact)', 'Role', 'First Name', 'Last Name', 'Email', 'Phone', 'Student ID', 'Shirt Size', 'Group / Department', 'Ticket', 'Checked In', 'Ticket ID'];
+        const header = ['VIP Type', 'Team', 'Party (Main Contact)', 'Role', 'First Name', 'Last Name', 'Email', 'Phone', 'Student ID', 'Shirt Size', 'Group / Department', 'Ticket', 'Checked In', 'Registered', 'Ticket ID'];
         const lines = [header];
         rows.forEach(({ type, party, isHost, v }) => {
             lines.push([
@@ -4220,6 +4229,7 @@
                 v.team || '',
                 v.sent === 'N/A' ? 'Label only' : (v.sent === 'Yes' ? 'Sent' : 'Unsent'),
                 v.sent === 'N/A' ? '' : (v.status === 'Checked In' ? 'Yes' : 'No'),
+                formatRegistered(v.registeredAt),
                 v.sent === 'N/A' ? '' : v.id
             ]);
         });

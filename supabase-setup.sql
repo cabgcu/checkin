@@ -180,6 +180,19 @@ begin
 end $$;
 create index if not exists guests_host_idx on public.guests (host_id) where host_id is not null;
 
+-- When each person registered (shown in the admin guest details and CSV export).
+-- Supabase tables normally have created_at already, so existing people keep their
+-- real sign-up time. If it's missing, it's added empty for existing rows (their
+-- time was never recorded, so they show "Not recorded") and filled in from now on.
+do $$
+begin
+    if not exists (select 1 from information_schema.columns
+                    where table_schema = 'public' and table_name = 'guests' and column_name = 'created_at') then
+        alter table public.guests add column created_at timestamptz;
+        alter table public.guests alter column created_at set default now();
+    end if;
+end $$;
+
 -- Fill host_id for existing guests whose host is unambiguous (exactly one main
 -- contact in the event with that name). Only rows with no host_id yet are set.
 -- Guests of two same-named main contacts can't be told apart automatically:
