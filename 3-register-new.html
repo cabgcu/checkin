@@ -1,0 +1,703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#131316" />
+    <title>CAB VIP Registration</title>
+    <link rel="icon" type="image/png" href="https://i.imgur.com/wR5HGeC.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="vip-gw.js"></script>
+    <script src="vip-forms.js"></script>
+    <style>
+        :root {
+            --app-bg: #131316; --card-bg: rgba(28, 28, 34, 0.68); --solid-bg: #1c1c22; --inset-bg: rgba(12, 12, 16, 0.45); --highlight-bg: rgba(255, 255, 255, 0.1);
+            --accent-blue: #2563eb; --accent-blue-hover: #1d4ed8; --accent-purple: #8b5cf6;
+            --text-main: #fff; --text-muted: #9ca3af; --text-dim: #71717a;
+            --line: rgba(39, 39, 42, 0.8); --line-strong: #3f3f46;
+            --success-text: #4ade80; --success-bg: rgba(74, 222, 128, 0.1);
+            --warning-text: #fbbf24; --warning-bg: rgba(251, 191, 36, 0.1);
+            --danger-text: #f87171; --danger-bg: rgba(248, 113, 113, 0.1);
+            --font: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+        html { background: var(--app-bg); color-scheme: dark; }
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { margin: 0; font-family: var(--font); font-size: 15px; color: var(--text-main); background: transparent; -webkit-font-smoothing: antialiased; }
+        /* Page background photo. A fixed layer (not background-attachment: fixed) so it
+           also stays put on iPhone; the tint keeps text on top readable. */
+        #bg-container {
+            position: fixed; top: 0; left: 0; right: 0; z-index: -1; pointer-events: none;
+            /* Sized to the tallest the screen gets (browser bars hidden), so no strip
+               shows at the bottom when the bars shrink while scrolling on a phone */
+            height: 100vh; height: 100lvh;
+            background: #131316 url('https://i.imgur.com/APGH0Wv.png') center / cover no-repeat;
+        }
+        #bg-container::after { content: ''; position: absolute; inset: 0; background: rgba(19, 19, 22, 0.25); }
+        .wrap { max-width: 640px; margin: 0 auto; padding: 32px 16px 64px; padding-top: calc(32px + env(safe-area-inset-top)); }
+        .brand { display: flex; align-items: center; gap: 12px; margin-bottom: 24px; }
+        .brand img { height: 34px; }
+        .brand .t { font-weight: 700; font-size: 15px; }
+        .brand .s { color: var(--text-muted); font-size: 13px; }
+
+        .card { background: var(--card-bg); border: 1px solid var(--line); border-radius: 24px; overflow: hidden; }
+        .card-body { padding: 28px; }
+        .banner { display: block; width: 100%; height: auto; }
+        h1 { margin: 0 0 10px; font-size: 26px; font-weight: 700; line-height: 1.2; }
+        .intro { color: var(--text-muted); line-height: 1.6; margin: 0 0 8px; white-space: pre-line; }
+        .muted { color: var(--text-muted); }
+        .section-title { font-size: 12px; font-weight: 600; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.06em; margin: 28px 0 12px; }
+        .note { background: rgba(139, 92, 246, 0.1); color: #c4b5fd; border-radius: 14px; padding: 12px 16px; font-size: 13px; line-height: 1.5; margin-top: 12px; }
+
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+        .field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+        .field.full { grid-column: 1 / -1; }
+        label { color: var(--text-muted); font-size: 13px; font-weight: 500; }
+        label .req { color: var(--accent-purple); }
+        input, select {
+            width: 100%; background: var(--inset-bg); border: 1px solid var(--line); color: #fff;
+            height: 46px; padding: 0 14px; border-radius: 12px; font: 16px var(--font); outline: none; transition: border-color 0.15s;
+        }
+        input:focus, select:focus { border-color: #52525b; }
+        input:disabled { color: var(--text-muted); }
+        input::placeholder { color: var(--text-dim); }
+        select { appearance: none; -webkit-appearance: none; padding-right: 36px; cursor: pointer;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+            background-repeat: no-repeat; background-position: right 12px center; background-size: 15px; }
+        select option { background: var(--solid-bg); }
+
+        .guest { background: var(--inset-bg); border: 1px solid var(--line); border-radius: 18px; padding: 16px; margin-bottom: 12px; }
+        .guest-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; gap: 10px; }
+        .guest-head strong { font-size: 14px; }
+        .guest .grid { gap: 12px; }
+        .chip { display: inline-block; font-size: 12px; font-weight: 500; padding: 3px 9px; border-radius: 6px; margin-left: 6px; }
+        .chip.in { color: var(--success-text); background: var(--success-bg); }
+        .chip.sent { color: var(--text-muted); background: rgba(255,255,255,0.06); }
+
+        .btn { background: var(--accent-blue); color: #fff; border: none; border-radius: 9999px; padding: 13px 22px; font: 600 15px var(--font); cursor: pointer; transition: background 0.15s, transform 0.1s; display: inline-flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; }
+        .btn:hover { background: var(--accent-blue-hover); }
+        .btn:active { transform: scale(0.98); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn.block { width: 100%; }
+        .btn.secondary { background: transparent; border: 1px solid var(--line-strong); color: #e4e4e7; }
+        .btn.secondary:hover { background: var(--highlight-bg); }
+        .link { background: none; border: none; color: #60a5fa; font: 500 14px var(--font); cursor: pointer; padding: 0; }
+        .link.danger { color: var(--danger-text); }
+        .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 24px; }
+
+        .state { text-align: center; padding: 44px 28px; }
+        .state .icon { width: 64px; height: 64px; border-radius: 50%; margin: 0 auto 18px; display: flex; align-items: center; justify-content: center; font-size: 28px; }
+        .state .icon.ok { background: var(--success-bg); }
+        .state .icon.wait { background: var(--warning-bg); }
+        .state .icon.no { background: var(--danger-bg); }
+        .state p { color: var(--text-muted); line-height: 1.6; margin: 0 auto; max-width: 440px; white-space: pre-line; }
+
+        .party-list { list-style: none; padding: 0; margin: 20px 0 0; text-align: left; background: var(--inset-bg); border: 1px solid var(--line); border-radius: 16px; overflow: hidden; }
+        .party-list li { padding: 12px 16px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 10px; font-size: 14px; }
+        .party-list li:last-child { border-bottom: none; }
+
+        .error { color: var(--danger-text); font-size: 14px; margin-top: 14px; min-height: 1px; }
+        .lost { margin-top: 20px; text-align: center; font-size: 14px; color: var(--text-muted); }
+        .verify { display: none; margin-top: 16px; text-align: left; background: var(--inset-bg); border: 1px solid var(--line); border-radius: 18px; padding: 18px; }
+        .verify.on { display: block; }
+        .spinner { width: 28px; height: 28px; margin: 60px auto; border: 3px solid rgba(255,255,255,0.12); border-top-color: var(--accent-purple); border-radius: 50%; animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        #toast { position: fixed; left: 50%; bottom: 28px; transform: translate(-50%, 12px); background: #fff; color: #18181b; padding: 13px 22px; border-radius: 9999px; font-weight: 600; font-size: 14px; opacity: 0; pointer-events: none; transition: 0.2s; box-shadow: 0 20px 40px rgba(0,0,0,0.4); }
+        #toast.show { opacity: 1; transform: translate(-50%, 0); }
+        @media (max-width: 560px) {
+            .card-body { padding: 22px 18px; }
+            .grid { grid-template-columns: 1fr; }
+            h1 { font-size: 22px; }
+        }
+    </style>
+</head>
+<body>
+<div id="bg-container"></div>
+<div class="wrap">
+    <div class="brand">
+        <img src="https://i.imgur.com/p2qZOL5.png" alt="CAB">
+        <div><div class="t">Canyon Activities Board</div><div class="s" id="eventName">VIP Registration</div></div>
+    </div>
+    <div class="card" id="app"><div class="spinner"></div></div>
+</div>
+<div id="toast"></div>
+
+<script>
+    const SUPABASE_URL = 'https://raraxpjsftqxhwkpwpab.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_p4FqN3nJTT5GFNU_xqZtYg_7fPtkKhS';
+    const _supabase = vipGw.client; // all data access goes through the vip-gateway Edge Function
+
+    const params = new URLSearchParams(location.search);
+    const app = document.getElementById('app');
+    let eventRow = null, formType = null, cfg = null, BREVO_API_KEY = '';
+
+    // ── helpers ────────────────────────────────────────────────
+    function escapeHtml(str) {
+        if (str === null || str === undefined) return '';
+        return String(str).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+    }
+    const isEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v);
+    const fullName = (g) => `${g.first_name || ''} ${g.last_name || ''}`.trim();
+    const hostTeamFor = (first, last) => `Guest of ${`${first} ${last}`.trim()}`;
+    function toast(msg) {
+        const t = document.getElementById('toast');
+        t.textContent = msg; t.classList.add('show');
+        clearTimeout(toast._t); toast._t = setTimeout(() => t.classList.remove('show'), 3000);
+    }
+    function processImageUrl(url) {
+        if (!url) return "";
+        if (url.includes('drive.google.com')) {
+            const m = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || url.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+            if (m && m[1]) return `https://lh3.googleusercontent.com/d/${m[1]}`;
+        }
+        return url;
+    }
+    function shirtOptions(selected) {
+        // Keep a size that was removed from the list since this person picked it
+        const sizes = selected && !VIP_FORM_SHIRT_SIZES.includes(selected) ? [...VIP_FORM_SHIRT_SIZES, selected] : VIP_FORM_SHIRT_SIZES;
+        return `<option value="">Select size</option>` + sizes.map(s => `<option value="${escapeHtml(s)}" ${s === selected ? 'selected' : ''}>${escapeHtml(s)}</option>`).join('');
+    }
+    function bannerSrc() { return processImageUrl((cfg && cfg.bannerUrl) || eventRow?.banner_url || ''); }
+    function bannerHtml() {
+        const src = bannerSrc();
+        return src ? `<img class="banner" src="${escapeHtml(src)}" alt="">` : '';
+    }
+    function showState(kind, title, message, extra = '') {
+        const icon = { ok: '✓', wait: '⏳', no: '✕' }[kind] || 'ℹ';
+        app.innerHTML = `${bannerHtml()}<div class="state"><div class="icon ${kind}">${icon}</div><h1>${escapeHtml(title)}</h1><p>${escapeHtml(message)}</p>${extra}</div>`;
+    }
+    const pageFormType = params.get('form');
+
+    async function loadFormsStore() {
+        const { data } = await _supabase.from('secrets').select('value').eq('name', VIP_FORMS_KEY).maybeSingle();
+        let store = {};
+        try { store = data?.value ? JSON.parse(data.value) : {}; } catch { store = {}; }
+        vipFormsApplyGlobal(store);   // custom forms, renamed labels and the shirt size list
+        return store;
+    }
+    async function loadEvent(id) {
+        const { data } = await _supabase.from('events').select('*').eq('id', id).maybeSingle();
+        return data;
+    }
+    async function loadBrevoKey() {
+        BREVO_API_KEY = 'server'; // sending happens in the gateway; the key is never sent to the browser
+        return BREVO_API_KEY;
+    }
+    // Main-contact rows for this event with this email (case-insensitive exact match), on any
+    // form. One email can be the main contact for only one registration per event.
+    async function findHostsByEmail(eventId, email) {
+        const pattern = email.replace(/[\\%_]/g, '\\$&');
+        const { data } = await _supabase.from('guests').select('id, first_name, last_name, team')
+            .eq('event_id', eventId).ilike('email', pattern);
+        return (data || []).filter(g => !(g.team || '').startsWith('Guest of '));
+    }
+
+    // Guests are linked to their main contact by host_id (see supabase-setup.sql). Until that
+    // column exists the page falls back to the old name-only link ("Guest of First Last").
+    let hostIdColumn = null;
+    async function hasHostIdColumn() {
+        if (hostIdColumn === null) {
+            const { error } = await _supabase.from('guests').select('host_id').limit(1);
+            hostIdColumn = !error;
+        }
+        return hostIdColumn;
+    }
+    const withHost = (row, hostId) => hostIdColumn && hostId ? { ...row, host_id: hostId } : row;
+
+    // A registration's guests: rows linked by host_id, plus older rows linked only by name —
+    // those only when no other registration in the event has the same name (otherwise we
+    // can't tell whose they are, which is how two registrations got merged).
+    async function loadPartyGuests(host) {
+        const team = hostTeamFor(host.first_name, host.last_name);
+        if (!(await hasHostIdColumn())) {
+            const { data } = await _supabase.from('guests').select(MANAGE_COLUMNS)
+                .eq('event_id', host.event_id).eq('team', team).order('first_name');
+            return data || [];
+        }
+        const [linked, legacy, sameName] = await Promise.all([
+            _supabase.from('guests').select(MANAGE_COLUMNS).eq('event_id', host.event_id).eq('host_id', host.id),
+            _supabase.from('guests').select(MANAGE_COLUMNS).eq('event_id', host.event_id).eq('team', team).is('host_id', null),
+            _supabase.from('guests').select('id, team').eq('event_id', host.event_id)
+                .eq('first_name', host.first_name).eq('last_name', host.last_name)
+        ]);
+        const otherHosts = (sameName.data || []).filter(h => h.id !== host.id && !(h.team || '').startsWith('Guest of '));
+        const rows = [...(linked.data || []), ...(otherHosts.length ? [] : (legacy.data || []))];
+        return rows.sort((a, b) => (a.first_name || '').localeCompare(b.first_name || ''));
+    }
+
+    // ── email ──────────────────────────────────────────────────
+    // attachments: [{ name, url }] from the assigned template (Brevo fetches each url)
+    async function sendEmail(to, toName, subject, html, text, attachments = []) {
+        try {
+            if (!(await loadBrevoKey())) return false;
+            // Sender + reply-to come from Settings (applied when loadFormsStore runs)
+            const payload = { ...vipBrevoBase('confirmation'), to: [{ email: to, name: toName }], subject, htmlContent: html, textContent: text };
+            const files = (attachments || []).filter(a => a && a.url).map(a => ({ name: a.name, url: a.url }));
+            if (files.length) payload.attachment = files;
+            const res = await vipGw.send(payload);
+            return res.ok;
+        } catch (e) { console.error('Email failed', e); return false; }
+    }
+
+    // The confirmation uses the template assigned to this form in Settings → Email Templates
+    // ("Who gets which email"), or the built-in wording when none is assigned.
+    async function loadConfirmTemplate() {
+        try {
+            const { data } = await _supabase.from('secrets').select('value').eq('name', VIP_EMAIL_TEMPLATES_KEY).maybeSingle();
+            const library = data?.value ? JSON.parse(data.value) : {};
+            const id = vipTemplateAssignment(library, eventRow.id, formType).confirm;
+            return (id && library[eventRow.id]?.templates?.[id]) || null;
+        } catch (e) { console.error('Could not load the confirmation template', e); return null; }
+    }
+
+    async function sendConfirmation(host, guests) {
+        const link = editPageUrl(true, { first: host.first_name, last: host.last_name, email: host.email });
+        const tpl = await loadConfirmTemplate();
+        const email = vipConfirmEmail({
+            eventName: eventRow.name, formLabel: VIP_FORM_TYPES[formType].label, host, guests,
+            canEdit: vipFormCanEdit(cfg), link, bannerUrl: bannerSrc(), tpl
+        });
+        return sendEmail(host.email, fullName(host), email.subject, email.html, email.text, tpl?.attachments);
+    }
+
+    // ── "Edit your registration": confirm first name, last name and email ──
+    // who = { first, last, email }: the confirmation email carries these so its button
+    // opens that person's registration directly (same check as typing them in).
+    function editPageUrl(openEdit = true, who = null) {
+        const url = new URL(vipFormLink(location.href, { event: eventRow.id, form: pageFormType || formType }));
+        ['edit', 'f', 'l', 'e'].forEach(k => url.searchParams.delete(k));
+        if (openEdit) url.searchParams.set('edit', '1');
+        if (who) { url.searchParams.set('f', who.first || ''); url.searchParams.set('l', who.last || ''); url.searchParams.set('e', who.email || ''); }
+        return url.toString();
+    }
+
+    const normName = (v) => (v || '').trim().toLowerCase().replace(/\s+/g, ' ');
+    async function findRegistration(first, last, email) {
+        if (!normName(first) || !normName(last) || !isEmail((email || '').trim())) return null;
+        return (await findHostsByEmail(eventRow.id, email.trim()))
+            .find(h => normName(h.first_name) === normName(first) && normName(h.last_name) === normName(last)) || null;
+    }
+
+    // Full-page "find my registration" screen (where the email button and edit links land)
+    function renderEditScreen(prefill = {}, message = '') {
+        const canSignUp = vipFormState(cfg).open;
+        app.innerHTML = `${bannerHtml()}<div class="card-body">
+            <h1>Edit your registration</h1>
+            <p class="intro">Enter the first name, last name and email you registered with to view or change your guests.</p>
+            <div class="grid" style="margin-top:20px;">
+                <div class="field"><label>First name</label><input id="vFirst" autocomplete="given-name" value="${escapeHtml(prefill.first || '')}"></div>
+                <div class="field"><label>Last name</label><input id="vLast" autocomplete="family-name" value="${escapeHtml(prefill.last || '')}"></div>
+                <div class="field full"><label>Email</label><input type="email" id="vEmail" autocomplete="email" value="${escapeHtml(prefill.email || '')}"></div>
+            </div>
+            <div class="error" id="verifyError">${escapeHtml(message)}</div>
+            <div class="actions"><button class="btn block" id="verifyBtn" onclick="verifyAndEdit()">Find my registration</button></div>
+            ${canSignUp ? `<div class="lost">Not registered yet? <button class="link" onclick="renderSignup()">Sign up instead</button></div>` : ''}
+        </div>`;
+        document.getElementById('vEmail').addEventListener('keydown', e => { if (e.key === 'Enter') verifyAndEdit(); });
+    }
+
+    function editPanelHtml(prefill = {}, open = false) {
+        if (!vipFormCanEdit(cfg)) return '';
+        return `<div class="lost">Already registered? <button class="link" onclick="document.getElementById('editPanel').classList.toggle('on')">Edit your registration</button>
+            <div class="verify ${open ? 'on' : ''}" id="editPanel">
+                <p class="muted" style="margin:0 0 12px; font-size:13px;">Enter the name and email you registered with.</p>
+                <div class="grid">
+                    <div class="field"><label>First name</label><input id="vFirst" autocomplete="given-name" value="${escapeHtml(prefill.first || '')}"></div>
+                    <div class="field"><label>Last name</label><input id="vLast" autocomplete="family-name" value="${escapeHtml(prefill.last || '')}"></div>
+                    <div class="field full"><label>Email</label><input type="email" id="vEmail" autocomplete="email" value="${escapeHtml(prefill.email || '')}"></div>
+                </div>
+                <div class="error" id="verifyError"></div>
+                <button class="btn block" style="margin-top:12px;" id="verifyBtn" onclick="verifyAndEdit()">Find my registration</button>
+            </div></div>`;
+    }
+
+    async function verifyAndEdit() {
+        const err = document.getElementById('verifyError');
+        const btn = document.getElementById('verifyBtn');
+        const first = document.getElementById('vFirst').value;
+        const last = document.getElementById('vLast').value;
+        const email = document.getElementById('vEmail').value.trim();
+        err.textContent = '';
+        if (!normName(first) || !normName(last) || !isEmail(email)) { err.textContent = 'Enter your first name, last name and email.'; return; }
+        btn.disabled = true; btn.textContent = 'Checking…';
+        try {
+            const match = await findRegistration(first, last, email);
+            if (!match) {
+                err.textContent = "We couldn't find a registration with that name and email. Use exactly what you registered with, or contact the CAB Special Events team.";
+                return;
+            }
+            await initManage(match.id);
+        } finally {
+            if (document.body.contains(btn)) { btn.disabled = false; btn.textContent = 'Find my registration'; }
+        }
+    }
+
+    // ── sign-up form ───────────────────────────────────────────
+    let guestCount = 0;
+
+    function guestBlock(i) {
+        return `<div class="guest" id="guest-${i}">
+            <div class="guest-head"><strong>Guest</strong><button type="button" class="link danger" onclick="removeGuestBlock(${i})">Remove</button></div>
+            <div class="grid">
+                <div class="field"><label>First name <span class="req">*</span></label><input data-g="${i}" data-f="first" autocomplete="off" required></div>
+                <div class="field"><label>Last name <span class="req">*</span></label><input data-g="${i}" data-f="last" autocomplete="off" required></div>
+                <div class="field ${cfg.askShirt ? '' : 'full'}"><label>Email <span class="req">*</span> <span class="muted">(ticket is sent here)</span></label><input type="email" data-g="${i}" data-f="email" autocomplete="off" required></div>
+                ${cfg.askShirt ? `<div class="field"><label>Shirt size <span class="req">*</span></label><select data-g="${i}" data-f="shirt" required>${shirtOptions('')}</select></div>` : ''}
+            </div></div>`;
+    }
+
+    function addGuestBlock() {
+        if (document.querySelectorAll('#guestList .guest').length >= cfg.guestLimit) return;
+        document.getElementById('guestList').insertAdjacentHTML('beforeend', guestBlock(guestCount++));
+        updateGuestButton();
+    }
+    function removeGuestBlock(i) { document.getElementById('guest-' + i)?.remove(); updateGuestButton(); }
+    function updateGuestButton() {
+        const n = document.querySelectorAll('#guestList .guest').length;
+        const btn = document.getElementById('addGuestBtn');
+        if (!btn) return;
+        btn.style.display = n >= cfg.guestLimit ? 'none' : '';
+        btn.textContent = `+ Add guest (${n} of ${cfg.guestLimit})`;
+    }
+
+    function renderSignup() {
+        const def = VIP_FORM_TYPES[formType];
+        const isStaff = formType === 'staff';
+        const hostNote = def.ticketedHost ? ''
+            : `<div class="note">As the main contact you won't get a ticket yourself. If you're attending, add yourself as a guest.</div>`;
+        app.innerHTML = `${bannerHtml()}<div class="card-body">
+            <h1>${escapeHtml(cfg.title)}</h1>
+            <p class="intro">${escapeHtml(cfg.intro)}</p>
+            <form id="signupForm" novalidate>
+                <div class="section-title">${def.ticketedHost ? 'Your info' : 'Main contact'}</div>
+                <div class="grid">
+                    <div class="field"><label>First name <span class="req">*</span></label><input id="hFirst" autocomplete="given-name" required></div>
+                    <div class="field"><label>Last name <span class="req">*</span></label><input id="hLast" autocomplete="family-name" required></div>
+                    <div class="field ${cfg.askPhone ? '' : 'full'}"><label>${isStaff ? 'GCU email' : 'Email'} <span class="req">*</span></label><input type="email" id="hEmail" autocomplete="email" required></div>
+                    ${cfg.askPhone ? `<div class="field"><label>Phone</label><input type="tel" id="hPhone" autocomplete="tel"></div>` : ''}
+                    ${isStaff ? `<div class="field ${cfg.askShirt ? '' : 'full'}"><label>Department <span class="req">*</span></label><select id="hDept" required><option value="">Select department</option>${VIP_FORM_STAFF_DEPTS.map(d => `<option>${escapeHtml(d)}</option>`).join('')}</select></div>` : ''}
+                    ${cfg.askShirt && def.ticketedHost ? `<div class="field"><label>Shirt size <span class="req">*</span></label><select id="hShirt" required>${shirtOptions('')}</select></div>` : ''}
+                </div>
+                ${hostNote}
+                ${cfg.guestLimit > 0 ? `
+                    <div class="section-title">Guests <span style="text-transform:none; letter-spacing:0;">· up to ${cfg.guestLimit}</span></div>
+                    <div id="guestList"></div>
+                    <button type="button" class="btn secondary block" id="addGuestBtn" onclick="addGuestBlock()"></button>` : ''}
+                <div class="error" id="formError"></div>
+                <div class="actions"><button type="submit" class="btn block" id="submitBtn">Submit registration</button></div>
+            </form>
+            ${editPanelHtml()}
+        </div>`;
+        if (cfg.guestLimit > 0) { if (!def.ticketedHost) addGuestBlock(); updateGuestButton(); }
+        document.getElementById('signupForm').addEventListener('submit', submitSignup);
+    }
+
+    function readGuests() {
+        return Array.from(document.querySelectorAll('#guestList .guest')).map(el => {
+            const val = (f) => el.querySelector(`[data-f="${f}"]`)?.value.trim() || '';
+            return { first: val('first'), last: val('last'), email: val('email'), shirt: val('shirt') };
+        }).filter(g => g.first || g.last || g.email);
+    }
+
+    async function submitSignup(e) {
+        e.preventDefault();
+        const err = document.getElementById('formError');
+        const btn = document.getElementById('submitBtn');
+        err.textContent = '';
+        const v = (id) => document.getElementById(id)?.value.trim() || '';
+        const host = { first: v('hFirst'), last: v('hLast'), email: v('hEmail'), phone: v('hPhone'), dept: v('hDept'), shirt: v('hShirt') };
+        const guests = readGuests();
+        const def = VIP_FORM_TYPES[formType];
+
+        if (!host.first || !host.last) return err.textContent = 'Please enter your first and last name.';
+        if (!isEmail(host.email)) return err.textContent = 'Please enter a valid email.';
+        if (formType === 'staff' && !host.dept) return err.textContent = 'Please choose your department.';
+        if (cfg.askShirt && def.ticketedHost && !host.shirt) return err.textContent = 'Please choose your shirt size.';
+        for (const g of guests) {
+            if (!g.first || !g.last) return err.textContent = 'Every guest needs a first and last name.';
+            if (!isEmail(g.email)) return err.textContent = `Please enter a valid email for ${g.first || 'each guest'}.`;
+            if (cfg.askShirt && !g.shirt) return err.textContent = `Please choose a shirt size for ${g.first}.`;
+        }
+        if (!def.ticketedHost && guests.length === 0) return err.textContent = 'Please add at least one guest.';
+        if (guests.length > cfg.guestLimit) return err.textContent = `You can add up to ${cfg.guestLimit} guests.`;
+
+        btn.disabled = true; btn.textContent = 'Submitting…';
+        try {
+            // Re-check the form is still open, then that this person isn't already registered
+            cfg = vipFormConfig(await loadFormsStore(), eventRow.id, formType);
+            if (!vipFormState(cfg).open) { showClosedState(); return; }
+
+            const existing = await findHostsByEmail(eventRow.id, host.email);
+            await hasHostIdColumn();
+            if (existing.length) {
+                // Could be on another form (e.g. they did early access and are now on the VIP form)
+                const otherType = vipFormTypeForTeam(existing[0].team);
+                const otherForm = otherType && otherType !== formType ? VIP_FORM_TYPES[otherType].label : '';
+                const otherCfg = otherType ? (otherType === formType ? cfg : vipFormConfig(await loadFormsStore(), eventRow.id, otherType)) : null;
+                const already = otherForm
+                    ? `${host.email} is already registered for this event through ${otherForm}. Each email can only register once per event.`
+                    : `There's already a registration for ${host.email}.`;
+                showState('wait', "You're already registered", vipFormCanEdit(otherCfg)
+                    ? `${already} Confirm your name and email below to view or change it.`
+                    : `${already} Contact the CAB Special Events team if something needs to change.`,
+                    vipFormCanEdit(otherCfg) ? editPanelHtml({ first: host.first, last: host.last, email: host.email }, true) : '');
+                return;
+            }
+
+            const { data: hostRows, error: hostErr } = await _supabase.from('guests').insert([{
+                event_id: eventRow.id, first_name: host.first, last_name: host.last, email: host.email,
+                phone: host.phone || null, shirt_size: def.ticketedHost ? (host.shirt || null) : null,
+                team: def.teamFor(host.dept), status: 'Invited', email_sent: def.ticketedHost ? 'No' : 'N/A'
+            }]).select();
+            if (hostErr || !hostRows?.[0]) throw hostErr || new Error('No row returned');
+            const hostRow = hostRows[0];
+
+            let guestRows = [];
+            if (guests.length) {
+                const { data, error } = await _supabase.from('guests').insert(guests.map(g => withHost({
+                    event_id: eventRow.id, first_name: g.first, last_name: g.last, email: g.email,
+                    shirt_size: g.shirt || null, team: hostTeamFor(host.first, host.last),
+                    status: 'Invited', email_sent: 'No'
+                }, hostRow.id))).select();
+                if (error) throw error;
+                guestRows = data || [];
+            }
+
+            await sendConfirmation(hostRow, guestRows);
+            const party = [hostRow, ...guestRows].map(g => `<li><span>${escapeHtml(fullName(g))}</span><span class="muted">${g.id === hostRow.id ? (def.ticketedHost ? 'You' : 'Main contact') : 'Guest'}</span></li>`).join('');
+            showState('ok', "You're registered!", cfg.successMessage,
+                `<ul class="party-list">${party}</ul>${vipFormCanEdit(cfg) ? `<div class="actions" style="justify-content:center;"><button class="btn secondary" onclick="initManage('${hostRow.id}')">Review or edit registration</button></div>` : ''}`);
+        } catch (ex) {
+            console.error(ex);
+            err.textContent = 'Something went wrong saving your registration. Please try again.';
+            btn.disabled = false; btn.textContent = 'Submit registration';
+        }
+    }
+
+    function showClosedState() {
+        const st = vipFormState(cfg);
+        if (st.reason === 'not_yet') {
+            const when = new Date(cfg.opensAt).toLocaleString(undefined, { weekday: 'long', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+            showState('wait', cfg.title, `Registration opens ${when}.`, editPanelHtml({}, params.get('edit') === '1'));
+        } else {
+            showState('no', 'Registration is closed', cfg.closedMessage, editPanelHtml({}, params.get('edit') === '1'));
+        }
+    }
+
+    // ── manage an existing registration ────────────────────────
+    let manageHost = null, manageGuests = [], removedIds = new Set(), newGuestSeq = 0;
+    const MANAGE_COLUMNS = 'id, event_id, first_name, last_name, team, status, email_sent, shirt_size';
+
+    async function initManage(hostId) {
+        // Contact details (email, phone) are deliberately not loaded here — only admins see them
+        const { data: host } = await _supabase.from('guests').select(MANAGE_COLUMNS).eq('id', hostId).maybeSingle();
+        if (!host || (host.team || '').startsWith('Guest of ')) {
+            showState('no', 'Registration not found', "We couldn't find this registration. Contact the CAB Special Events team for help.");
+            return;
+        }
+        eventRow = await loadEvent(host.event_id);
+        if (!eventRow) { showState('no', 'Event not found', 'This event is no longer available.'); return; }
+        document.getElementById('eventName').textContent = eventRow.name;
+        formType = vipFormTypeForTeam(host.team);
+        cfg = formType ? vipFormConfig(await loadFormsStore(), eventRow.id, formType) : null;
+
+        manageHost = host;
+        manageGuests = await loadPartyGuests(host);
+        removedIds = new Set();
+        renderManage();
+    }
+
+    function renderManage() {
+        const canEdit = !!cfg && vipFormCanEdit(cfg);
+        const def = formType ? VIP_FORM_TYPES[formType] : null;
+        const limit = cfg ? Math.max(cfg.guestLimit, manageGuests.length) : manageGuests.length;
+        const dis = canEdit ? '' : 'disabled';
+        const h = manageHost;
+        const isStaff = formType === 'staff';
+        const statusChip = (g) => g.status === 'Checked In' ? '<span class="chip in">Checked in</span>' : (g.email_sent === 'Yes' ? '<span class="chip sent">Ticket sent</span>' : '');
+
+        const guestHtml = (g, key, isNew) => {
+            const locked = !canEdit || g.status === 'Checked In';
+            const d = locked ? 'disabled' : '';
+            return `<div class="guest" data-key="${key}" data-new="${isNew ? 1 : 0}">
+                <div class="guest-head"><strong>${isNew ? 'New guest' : escapeHtml(fullName(g))}${statusChip(g)}</strong>
+                    ${locked ? '' : `<button type="button" class="link danger" onclick="removeManageGuest('${key}')">Remove</button>`}</div>
+                <div class="grid">
+                    <div class="field"><label>First name</label><input data-f="first" value="${escapeHtml(g.first_name || '')}" ${d}></div>
+                    <div class="field"><label>Last name</label><input data-f="last" value="${escapeHtml(g.last_name || '')}" ${d}></div>
+                    <div class="field ${cfg?.askShirt ? '' : 'full'}"><label>${isNew ? 'Email <span class="req">*</span> <span class="muted">(ticket is sent here)</span>' : `New email <span class="muted">(optional${g.email_sent === 'Yes' ? ' · sends a new ticket' : ''})</span>`}</label><input type="email" data-f="email" autocomplete="off" placeholder="${isNew ? '' : 'On file — leave blank to keep'}" ${d}></div>
+                    ${cfg?.askShirt ? `<div class="field"><label>Shirt size</label><select data-f="shirt" ${d}>${shirtOptions(g.shirt_size || '')}</select></div>` : ''}
+                </div></div>`;
+        };
+
+        app.innerHTML = `${bannerHtml()}<div class="card-body">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:12px;"><h1 style="margin:0;">Your registration</h1><a class="link" href="${escapeHtml(editPageUrl(false))}" style="text-decoration:none; white-space:nowrap;">Done</a></div>
+            <p class="intro">${escapeHtml(eventRow.name)}${def ? ' · ' + escapeHtml(def.label) : ''}</p>
+            ${canEdit ? '' : `<div class="note">${cfg ? 'Changes are closed for this registration.' : "This registration can't be edited online."} Contact the CAB Special Events team if something needs to change.</div>`}
+            <div class="section-title">${def?.ticketedHost ? 'Your info' : 'Main contact'}${def?.ticketedHost ? statusChip(h) : ''}</div>
+            <div class="grid">
+                <div class="field"><label>First name</label><input id="mFirst" value="${escapeHtml(h.first_name || '')}" ${dis}></div>
+                <div class="field"><label>Last name</label><input id="mLast" value="${escapeHtml(h.last_name || '')}" ${dis}></div>
+                <div class="field ${cfg?.askPhone ? '' : 'full'}"><label>Email <span class="muted">(contact CAB to change)</span></label><input value="On file" disabled></div>
+                ${cfg?.askPhone ? `<div class="field"><label>New phone <span class="muted">(optional)</span></label><input id="mPhone" type="tel" autocomplete="off" placeholder="Leave blank to keep" ${dis}></div>` : ''}
+                ${isStaff ? `<div class="field ${cfg?.askShirt ? '' : 'full'}"><label>Department</label><select id="mDept" ${dis}>${VIP_FORM_STAFF_DEPTS.map(d => `<option ${d === h.team ? 'selected' : ''}>${escapeHtml(d)}</option>`).join('')}${VIP_FORM_STAFF_DEPTS.includes(h.team) ? '' : `<option selected>${escapeHtml(h.team)}</option>`}</select></div>` : ''}
+                ${cfg?.askShirt && def?.ticketedHost ? `<div class="field"><label>Shirt size</label><select id="mShirt" ${dis}>${shirtOptions(h.shirt_size || '')}</select></div>` : ''}
+            </div>
+            ${limit > 0 || manageGuests.length ? `<div class="section-title">Guests <span style="text-transform:none; letter-spacing:0;">· up to ${limit}</span></div>
+                <div id="manageGuests">${manageGuests.filter(g => !removedIds.has(g.id)).map(g => guestHtml(g, g.id, false)).join('')}</div>
+                ${canEdit ? `<button type="button" class="btn secondary block" id="manageAddBtn" onclick="addManageGuest()">+ Add guest</button>` : ''}` : ''}
+            <div class="error" id="manageError"></div>
+            ${canEdit ? `<div class="actions"><button class="btn block" id="manageSaveBtn" onclick="saveManage()">Save changes</button></div>` : ''}
+        </div>`;
+        renderManage.guestHtml = guestHtml;
+        renderManage.limit = limit;
+        updateManageAddBtn();
+    }
+
+    function manageGuestCount() { return document.querySelectorAll('#manageGuests .guest').length; }
+    function updateManageAddBtn() {
+        const btn = document.getElementById('manageAddBtn');
+        if (!btn) return;
+        const n = manageGuestCount();
+        btn.style.display = n >= renderManage.limit ? 'none' : '';
+        btn.textContent = `+ Add guest (${n} of ${renderManage.limit})`;
+    }
+    function addManageGuest() {
+        if (manageGuestCount() >= renderManage.limit) return;
+        document.getElementById('manageGuests').insertAdjacentHTML('beforeend', renderManage.guestHtml({}, 'new-' + (newGuestSeq++), true));
+        updateManageAddBtn();
+    }
+    function removeManageGuest(key) {
+        const el = document.querySelector(`#manageGuests [data-key="${key}"]`);
+        if (!el) return;
+        if (el.dataset.new !== '1') {
+            const g = manageGuests.find(x => x.id === key);
+            if (!confirm(`Remove ${fullName(g)}? Their ticket will stop working.`)) return;
+            removedIds.add(key);
+        }
+        el.remove();
+        updateManageAddBtn();
+    }
+
+    async function saveManage() {
+        const err = document.getElementById('manageError');
+        const btn = document.getElementById('manageSaveBtn');
+        err.textContent = '';
+
+        // Re-check edits are still allowed
+        cfg = vipFormConfig(await loadFormsStore(), eventRow.id, formType);
+        if (!vipFormCanEdit(cfg)) { renderManage(); return; }
+
+        const def = VIP_FORM_TYPES[formType];
+        const v = (id) => document.getElementById(id)?.value.trim();
+        const first = v('mFirst'), last = v('mLast');
+        if (!first || !last) return err.textContent = 'Please enter a first and last name.';
+
+        const rows = Array.from(document.querySelectorAll('#manageGuests .guest')).map(el => {
+            const val = (f) => el.querySelector(`[data-f="${f}"]`)?.value.trim() || '';
+            return { key: el.dataset.key, isNew: el.dataset.new === '1', first: val('first'), last: val('last'), email: val('email'), shirt: val('shirt') };
+        }).filter(r => !r.isNew || r.first || r.last || r.email);
+        for (const r of rows) {
+            if (!r.first || !r.last) return err.textContent = 'Every guest needs a first and last name.';
+            if ((r.isNew || r.email) && !isEmail(r.email)) return err.textContent = r.isNew ? `Please enter a valid email for ${r.first}.` : `The new email for ${r.first} doesn't look right.`;
+            if (cfg.askShirt && !r.shirt) return err.textContent = `Please choose a shirt size for ${r.first}.`;
+        }
+        if (!def.ticketedHost && rows.length === 0) return err.textContent = 'Please keep at least one guest.';
+
+        btn.disabled = true; btn.textContent = 'Saving…';
+        try {
+            const oldTeam = hostTeamFor(manageHost.first_name, manageHost.last_name);
+            const newTeam = hostTeamFor(first, last);
+            const hostUpdate = { first_name: first, last_name: last };
+            if (cfg.askPhone && v('mPhone')) hostUpdate.phone = v('mPhone');
+            if (formType === 'staff' && v('mDept')) hostUpdate.team = v('mDept');
+            if (cfg.askShirt && def.ticketedHost) hostUpdate.shirt_size = v('mShirt') || null;
+            const ops = [_supabase.from('guests').update(hostUpdate).eq('id', manageHost.id)];
+
+            for (const id of removedIds) {
+                const g = manageGuests.find(x => x.id === id);
+                if (g && g.status !== 'Checked In') ops.push(_supabase.from('guests').delete().eq('id', id));
+            }
+            for (const r of rows) {
+                if (r.isNew) {
+                    ops.push(_supabase.from('guests').insert([withHost({ event_id: eventRow.id, first_name: r.first, last_name: r.last, email: r.email,
+                        shirt_size: r.shirt || null, team: newTeam, status: 'Invited', email_sent: 'No' }, manageHost.id)]));
+                    continue;
+                }
+                const g = manageGuests.find(x => x.id === r.key);
+                if (!g || g.status === 'Checked In') {
+                    if (g && oldTeam !== newTeam) ops.push(_supabase.from('guests').update({ team: newTeam }).eq('id', g.id));
+                    continue;
+                }
+                const fields = { first_name: r.first, last_name: r.last, team: newTeam };
+                if (r.email) fields.email = r.email;   // blank keeps the email on file
+                if (cfg.askShirt) fields.shirt_size = r.shirt || null;
+                if (r.email && g.email_sent === 'Yes') {
+                    // The old ticket went to someone else's inbox: issue a new ticket id and drop the old one
+                    ops.push((async () => {
+                        // Keep the original sign-up time on the replacement row
+                        const { data: orig } = await _supabase.from('guests').select('created_at').eq('id', g.id).maybeSingle();
+                        const { error } = await _supabase.from('guests').insert([withHost({ ...fields, event_id: eventRow.id, status: g.status, email_sent: 'No',
+                            ...(orig?.created_at ? { created_at: orig.created_at } : {}) }, manageHost.id)]);
+                        if (!error) await _supabase.from('guests').delete().eq('id', g.id);
+                        else throw error;
+                    })());
+                } else {
+                    ops.push(_supabase.from('guests').update(fields).eq('id', g.id));
+                }
+            }
+            // Every guest of this registration was updated above. (Renaming by team text here
+            // would also rename the guests of another registration with the same name.)
+            const results = await Promise.all(ops);
+            const failed = results.find(r => r && r.error);
+            if (failed) throw failed.error;
+            toast('Changes saved');
+            await initManage(manageHost.id);
+        } catch (ex) {
+            console.error(ex);
+            err.textContent = 'Something went wrong saving your changes. Please try again.';
+            btn.disabled = false; btn.textContent = 'Save changes';
+        }
+    }
+
+    // ── start ──────────────────────────────────────────────────
+    (async function init() {
+        try {
+            formType = pageFormType;
+            const eventId = params.get('event');
+            const invalidLink = () => showState('no', 'Link not valid', 'This registration link is incomplete. Please use the link CAB shared with you.');
+            if (!eventId || !formType) return invalidLink();
+            const [ev, store] = await Promise.all([loadEvent(eventId), loadFormsStore()]);
+            if (!Object.prototype.hasOwnProperty.call(VIP_FORM_TYPES, formType)) return invalidLink();
+            eventRow = ev;
+            if (!eventRow) { showState('no', 'Event not found', 'This event is no longer available.'); return; }
+            document.getElementById('eventName').textContent = eventRow.name;
+            cfg = vipFormConfig(store, eventRow.id, formType);
+            document.title = `${cfg.title} · ${eventRow.name}`;
+
+            if (params.get('edit') === '1') {
+                const who = { first: params.get('f') || '', last: params.get('l') || '', email: params.get('e') || '' };
+                // Keep names/emails out of the address bar and browser history
+                if (params.has('f') || params.has('l') || params.has('e')) history.replaceState(null, '', editPageUrl(true));
+                if (!vipFormCanEdit(cfg)) {
+                    showState('no', 'Editing is closed', 'Changes to registrations are closed. Contact the CAB Special Events team if something needs to change.');
+                    return;
+                }
+                if (who.first && who.last && who.email) {
+                    const match = await findRegistration(who.first, who.last, who.email);
+                    if (match) return await initManage(match.id);
+                    return renderEditScreen(who, "We couldn't find that registration. If you changed your name, enter your current name and email.");
+                }
+                return renderEditScreen(who);
+            }
+
+            if (vipFormState(cfg).open) renderSignup();
+            else showClosedState();
+        } catch (e) {
+            console.error(e);
+            showState('no', 'Something went wrong', 'Please refresh the page and try again.');
+        }
+    })();
+</script>
+</body>
+</html>
